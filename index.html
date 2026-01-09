@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Seoul Runner (Penguin vs Zombies)</title>
+  <style>
+    :root { color-scheme: light; }
+    html, body { height: 100%; margin: 0; background: #f6f7fb; font-family: system-ui, -apple-system, "Noto Sans KR", Arial; }
+    .wrap { height: 100%; display: grid; place-items: center; padding: 14px; }
+    .card {
+      width: min(980px, 96vw);
+      background: #fff;
+      border: 1px solid #e7e9ef;
+      border-radius: 18px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.06);
+      overflow: hidden;
+    }
+    .topbar{
+      display:flex; gap:10px; align-items:center; justify-content:space-between;
+      padding: 10px 14px; border-bottom:1px solid #eef0f6;
+    }
+    .title { font-weight: 800; letter-spacing: -0.02em; }
+    .hint { color:#6b7280; font-size: 13px; }
+    canvas{ display:block; width:100%; height:auto; background:#fff; touch-action: manipulation; }
+
+    .overlay {
+      position: absolute; inset: 0; display:flex; align-items:center; justify-content:center;
+      pointer-events: none;
+    }
+    .panel {
+      pointer-events: none;
+      text-align:center;
+      background: rgba(255,255,255,0.9);
+      border:1px solid #e7e9ef;
+      border-radius: 16px;
+      padding: 16px 16px;
+      width: min(420px, 86vw);
+      box-shadow: 0 14px 34px rgba(0,0,0,0.10);
+    }
+    .panel h2{ margin:0 0 6px; font-size: 18px; letter-spacing:-0.02em;}
+    .panel p{ margin:0; color:#6b7280; font-size: 13px; line-height:1.45;}
+    .kbd {
+      display:inline-block; padding:2px 8px; border:1px solid #d8dbe6; border-radius: 999px;
+      background:#fff; font-weight:700; color:#111827; font-size: 12px;
+    }
+    .stage { position: relative; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="topbar">
+        <div class="title">Seoul Runner — 🐧 vs 🧟</div>
+        <div class="hint">점프: <span class="kbd">Space</span> / <span class="kbd">↑</span> / 화면 터치 · 재시작: <span class="kbd">R</span></div>
+      </div>
+
+      <div class="stage">
+        <canvas id="game" width="960" height="360" aria-label="Seoul Runner"></canvas>
+
+        <div class="overlay" id="overlay">
+          <div class="panel" id="panel">
+            <h2>시작하기</h2>
+            <p>
+              화면을 <b>한 번 터치</b>하거나 <span class="kbd">Space</span>를 누르면 시작합니다.<br/>
+              좀비(장애물)를 피하고 점수(거리)를 올려보세요.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/**
+ * Seoul Runner (single-file)
+ * - Canvas 2D endless runner (Chrome dino-like)
+ * - Player: Penguin (simple vector)
+ * - Obstacles: "Seoul zombies" (different hats / items)
+ * - Background: N-Seoul Tower, bridge, skyline silhouettes
+ * - Controls: Space/ArrowUp/Tap to jump, R to restart
+ */
+
+(() => {
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  const overlay = document.getElementById("overlay");
+  const panel = document.getElementById("panel");
+
+  // --------- Responsive scale (keeps internal resolution) ----------
+  function fitCanvas() {
+    const cardW = canvas.parentElement.clientWidth;
+    // Keep aspect ratio based on canvas width/height
+    const ratio = canvas.height / canvas.width;
+    canvas.style.height = Math.round(cardW * ratio) + "px";
+  }
+  window.addEventListener("resize", fitCanvas);
+  fitCanvas();
+
+  // --------- Game constants ----------
+  const G = 2400;                // gravity (px/s^2)
+  const JUMP_V = 780;            // jump impulse (px/s)
+  const FLOOR_Y = 300;           // floor line y
+  const PLAYER_X = 160;          // fixed x
+
+  // difficulty curve
+  const SPEED_START = 380;       // world speed (px/s)
+  const SPEED_MAX = 980;
+  const SPEED_GAIN = 0.028;      // per second
+
+  const OBSTACLE_MIN_GAP = 420;  // px
+  const OBSTACLE_MAX_GAP = 820;
+
+  // Mobile-friendly: allow a small coyote time
+  const COYOTE_TIME = 0.08;      // seconds after leaving ground still can jump
+  const JUMP_BUFFER = 0.10;      // seconds buffer for early press
+
+  // --------- State ----------
+  const state = {
+    started: false,
+    running: false,
+    over: false,
+    t: 0,
+    dt: 0,
+    lastTime: 0,
+
+    score: 0,        // distance-based
+    hi: 0,
+
+    speed: SPEED_START,
+
+    // input helpers
+    jumpQueued: 0,   // seconds remaining
+    coyote: 0,       // seconds remaining
+
+    // world
+    obstacles: [],
+    particles: [],
+
+    // background parallax
+    bg1: [], // far skyline
+    bg2: [], // near skyline/bridge segments
+  };
+
+  // --------- Helpers ----------
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const randi = (a, b) => Math.floor(rand(a, b + 1));
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  function resetGame() {
+    state.started = false;
+    state.running = false;
+    state.over = false;
+    state.t = 0;
+    state.score = 0;
+    state.speed = SPEED_START;
+    state.obstacles.length = 0;
+    state.particles.length = 0;
+    state.jumpQueued = 0;
+    state.coyote = 0;
+
+    player.y = FLOOR_Y;
+    player.vy = 0;
+    player.onGround = true;
+
+    initBackground();
+    spawnObstacle(true);
+
+    showOverlay("시작하기", "화면을 <b>한 번 터치</b>하거나 <span class='kbd'>Space</span>를 누르면 시작합니다.<br/>좀비(장애물)를 피하고 점수(거리)를 올려보세요.");
+  }
+
+  function showOverlay(title, html) {
+    overlay.style.display = "flex";
+    panel.querySelector("h2").textContent = title;
+    panel.querySelector("p").innerHTML = html;
+  }
+  function hideOverlay() {
+    overlay.style.display = "none";
+  }
+
+  // --------- Player ----------
+  const player = {
+    x: PLAYER_X,
+    y: FLOOR_Y,
+    vy: 0,
+    w: 46,
+    h: 58,
+    onGround: true,
+  };
+
+  function playerRect() {
+    // simple hitbox, slightly smaller than sprite
+    return {
+      x: player.x - player.w * 0.35,
+      y: player.y - player.h,
+      w: player.w * 0.70,
+      h: player.h * 0.92,
+    };
+  }
+
+  // --------- Obstacles ----------
+  // Types: different "Seoul vibe" zombies: hanbok hat, delivery box, subway card, etc (just stylized)
+  const OB_TYPES = [
+    { key: "zombie_basic",   w: 42, h: 64, kind: "basic" },
+    { key: "zombie_hat",     w: 46, h: 70, kind: "hat" },
+    { key: "zombie_box",     w: 54, h: 66, kind: "box" },
+    { key: "zombie_tall",    w: 40, h: 84, kind: "tall" },
+  ];
+
+  function spawnObstacle(initial = false) {
+    const type = OB_TYPES[randi(0, OB_TYPES.length - 1)];
+    const last = state.obstacles[state.obstacles.length - 1];
+
+    const gap = initial ? 520 : rand(OBSTACLE_MIN_GAP, OBSTACLE_MAX_GAP) * (0.92 + Math.random() * 0.18);
+    const x = last ? last.x + gap : canvas.width + 220;
+
+    state.obstacles.push({
+      type,
+      x,
+      y: FLOOR_Y,
+      w: type.w,
+      h: type.h,
+      phase: rand(0, Math.PI * 2),
+    });
+  }
+
+  function obstacleRect(ob) {
+    // slightly smaller hitbox
+    const padX = ob.w * 0.18;
+    const padY = ob.h * 0.10;
+    return {
+      x: ob.x - ob.w/2 + padX,
+      y: ob.y - ob.h + padY,
+      w: ob.w - padX*2,
+      h: ob.h - padY*1.4,
+    };
+  }
+
+  function rectOverlap(a, b) {
+    return !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h);
+  }
+
+  // --------- Background (Seoul silhouettes) ----------
+  function initBackground() {
+    state.bg1.length = 0;
+    state.bg2.length = 0;
+
+    // far skyline blocks
+    let x = 0;
+    while (x < canvas.width + 400) {
+      const w = rand(60, 140);
+      const h = rand(28, 64);
+      state.bg1.push({ x, w, h });
+      x += w + rand(14, 40);
+    }
+
+    // near layer: bridge pieces + small towers + N-seoul tower occasionally
+    x = 0;
+    let placedTower = false;
+    while (x < canvas.width + 800) {
+      const roll = Math.random();
+      if (!placedTower && roll < 0.18) {
+        state.bg2.push({ x, kind: "n_tower" });
+        x += 220;
+        placedTower = true;
+      } else if (roll < 0.55) {
+        state.bg2.push({ x, kind: "bridge" });
+        x += 210;
+      } else {
+        state.bg2.push({ x, kind: "block", w: rand(46, 110), h: rand(40, 92) });
+        x += rand(80, 150);
+      }
+    }
+  }
+
+  // --------- Effects ----------
+  function puff(x, y) {
+    // small dust
+    for (let i = 0; i < 10; i++) {
+      state.particles.push({
+        x, y,
+        vx: rand(-90, 60),
+        vy: rand(-220, -40),
+        life: rand(0.25, 0.45),
+        t: 0,
+        r: rand(2, 5),
+      });
+    }
+  }
+
+  // --------- Input ----------
+  function requestJump() {
+    if (!state.started) {
+      startGame();
+      return;
+    }
+    if (!state.running || state.over) return;
+    state.jumpQueued = JUMP_BUFFER; // buffer jump
+  }
+
+  function startGame() {
+    state.started = true;
+    state.running = true;
+    state.over = false;
+    hideOverlay();
+  }
+
+  function restartGame() {
+    resetGame();
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space" || e.code === "ArrowUp") {
+      e.preventDefault();
+      requestJump();
+    }
+    if (e.code === "KeyR") {
+      restartGame();
+    }
+  }, { passive: false });
+
+  // tap/click
+  canvas.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    requestJump();
+  }, { passive: false });
+
+  // --------- Update loop ----------
+  function update(dt) {
+    state.dt = dt;
+    state.t += dt;
+
+    if (!state.running) return;
+
+    // speed up slowly
+    state.speed = clamp(state.speed + SPEED_GAIN * 1000 * dt, SPEED_START, SPEED_MAX);
+
+    // score: distance
+    state.score += state.speed * dt * 0.03; // scale
+    state.hi = Math.max(state.hi, Math.floor(state.score));
+
+    // player physics
+    player.vy += G * dt;
+    player.y += player.vy * dt;
+
+    // ground collision
+    if (player.y >= FLOOR_Y) {
+      if (!player.onGround && player.vy > 200) puff(player.x - 10, FLOOR_Y);
+      player.y = FLOOR_Y;
+      player.vy = 0;
+      player.onGround = true;
+      state.coyote = COYOTE_TIME;
+    } else {
+      // in air
+      player.onGround = false;
+      state.coyote = Math.max(0, state.coyote - dt);
+    }
+
+    // jump buffer countdown
+    state.jumpQueued = Math.max(0, state.jumpQueued - dt);
+
+    // perform buffered jump if can
+    const canJump = player.onGround || state.coyote > 0;
+    if (state.jumpQueued > 0 && canJump) {
+      player.vy = -JUMP_V;
+      player.onGround = false;
+      state.jumpQueued = 0;
+      state.coyote = 0;
+    }
+
+    // obstacles move
+    for (const ob of state.obstacles) {
+      ob.x -= state.speed * dt;
+      ob.phase += dt * 8;
+    }
+
+    // remove passed obstacles, spawn new
+    while (state.obstacles.length && state.obstacles[0].x < -120) {
+      state.obstacles.shift();
+      spawnObstacle(false);
+    }
+
+    // particles
+    for (const p of state.particles) {
+      p.t += dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 1400 * dt;
+    }
+    state.particles = state.particles.filter(p => p.t < p.life);
+
+    // background scroll (parallax)
+    // far layer
+    for (const b of state.bg1) b.x -= state.speed * dt * 0.18;
+    // recycle far blocks
+    if (state.bg1.length) {
+      while (state.bg1[0].x + state.bg1[0].w < -80) {
+        const first = state.bg1.shift();
+        const last = state.bg1[state.bg1.length - 1];
+        first.x = last.x + last.w + rand(14, 40);
+        first.w = rand(60, 140);
+        first.h = rand(28, 64);
+        state.bg1.push(first);
+      }
+    }
+    // near layer
+    for (const b of state.bg2) b.x -= state.speed * dt * 0.36;
+    while (state.bg2.length && state.bg2[0].x < -260) {
+      const first = state.bg2.shift();
+      const last = state.bg2[state.bg2.length - 1];
+      // respawn with some variety
+      const roll = Math.random();
+      if (roll < 0.20) {
+        first.kind = "n_tower";
+        first.x = last.x + 220;
+      } else if (roll < 0.60) {
+        first.kind = "bridge";
+        first.x = last.x + 210;
+      } else {
+        first.kind = "block";
+        first.w = rand(46, 110);
+        first.h = rand(40, 92);
+        first.x = last.x + rand(80, 150);
+      }
+      state.bg2.push(first);
+    }
+
+    // collision
+    const pr = playerRect();
+    for (const ob of state.obstacles) {
+      if (rectOverlap(pr, obstacleRect(ob))) {
+        gameOver();
+        break;
+      }
+    }
+  }
+
+  function gameOver() {
+    state.running = false;
+    state.over = true;
+
+    showOverlay(
+      "GAME OVER",
+      `점수: <b>${Math.floor(state.score)}</b> · 최고: <b>${state.hi}</b><br/>
+       다시 시작: <span class="kbd">R</span> 또는 화면 터치`
+    );
+  }
+
+  // --------- Drawing ----------
+  function draw() {
+    // base
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // sky
+    drawSky();
+
+    // far skyline
+    drawFarSkyline();
+
+    // near skyline (bridge + tower + blocks)
+    drawNearLayer();
+
+    // ground
+    drawGround();
+
+    // obstacles
+    for (const ob of state.obstacles) drawZombie(ob);
+
+    // player
+    drawPenguin(player.x, player.y);
+
+    // particles
+    drawParticles();
+
+    // HUD
+    drawHUD();
+  }
+
+  function drawSky() {
+    // subtle gradient-ish bands (no gradient needed)
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#f4f6fb";
+    ctx.fillRect(0, 0, canvas.width, 140);
+
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillRect(0, 140, canvas.width, 140);
+  }
+
+  function drawFarSkyline() {
+    const baseY = 210;
+    ctx.fillStyle = "#e9edf7";
+    for (const b of state.bg1) {
+      ctx.fillRect(b.x, baseY - b.h, b.w, b.h);
+      // tiny windows
+      ctx.fillStyle = "#edf1fb";
+      for (let i = 0; i < 4; i++) {
+        const wx = b.x + 8 + i * 10;
+        const wy = baseY - 10 - (i % 2) * 10;
+        ctx.fillRect(wx, wy, 4, 6);
+      }
+      ctx.fillStyle = "#e9edf7";
+    }
+  }
+
+  function drawNearLayer() {
+    const baseY = 255;
+    // silhouette color
+    ctx.fillStyle = "#dfe6f4";
+
+    for (const b of state.bg2) {
+      if (b.kind === "bridge") {
+        drawBridge(b.x, baseY);
+      } else if (b.kind === "n_tower") {
+        drawNTower(b.x, baseY);
+      } else {
+        // block
+        ctx.fillRect(b.x, baseY - b.h, b.w, b.h);
+        // rooftop
+        ctx.fillRect(b.x - 6, baseY - b.h, b.w + 12, 6);
+      }
+    }
+  }
+
+  function drawBridge(x, baseY) {
+    // Han-river bridge vibe
+    ctx.save();
+    ctx.translate(x, 0);
+    ctx.fillStyle = "#dfe6f4";
+
+    // deck
+    ctx.fillRect(0, baseY - 18, 210, 18);
+
+    // arches
+    ctx.strokeStyle = "#d7deee";
+    ctx.lineWidth = 6;
+    for (let i = 0; i < 4; i++) {
+      const ax = 22 + i * 46;
+      ctx.beginPath();
+      ctx.arc(ax, baseY - 18, 22, Math.PI, 2 * Math.PI);
+      ctx.stroke();
+    }
+
+    // pillars
+    ctx.fillStyle = "#d7deee";
+    for (let i = 0; i < 5; i++) {
+      const px = 18 + i * 46;
+      ctx.fillRect(px, baseY - 18, 10, 42);
+    }
+    ctx.restore();
+  }
+
+  function drawNTower(x, baseY) {
+    // N Seoul Tower simplified silhouette
+    ctx.save();
+    ctx.translate(x, 0);
+
+    ctx.fillStyle = "#dfe6f4";
+    // hill
+    ctx.beginPath();
+    ctx.moveTo(-40, baseY + 50);
+    ctx.quadraticCurveTo(40, baseY - 10, 140, baseY + 50);
+    ctx.closePath();
+    ctx.fill();
+
+    // tower stem
+    ctx.fillStyle = "#d7deee";
+    ctx.fillRect(56, baseY - 86, 18, 86);
+
+    // body
+    ctx.fillStyle = "#dfe6f4";
+    ctx.beginPath();
+    ctx.roundRect(38, baseY - 126, 54, 48, 10);
+    ctx.fill();
+
+    // antenna
+    ctx.fillRect(63, baseY - 156, 4, 30);
+
+    ctx.restore();
+  }
+
+  function drawGround() {
+    // ground line
+    ctx.fillStyle = "#e5e7eb";
+    ctx.fillRect(0, FLOOR_Y + 2, canvas.width, 2);
+
+    // road pattern
+    ctx.fillStyle = "#f1f5f9";
+    const stripeY = FLOOR_Y + 10;
+    const stripeH = 6;
+    const speed = state.running ? state.speed : SPEED_START;
+    const offset = -((state.t * speed * 0.35) % 60);
+    for (let x = offset; x < canvas.width + 60; x += 60) {
+      ctx.fillRect(x, stripeY, 28, stripeH);
+    }
+  }
+
+  function drawHUD() {
+    ctx.save();
+    ctx.fillStyle = "#111827";
+    ctx.font = "700 16px system-ui, -apple-system, 'Noto Sans KR', Arial";
+    ctx.fillText(`SCORE ${Math.floor(state.score).toString().padStart(5, "0")}`, canvas.width - 190, 28);
+
+    ctx.fillStyle = "#6b7280";
+    ctx.font = "600 12px system-ui, -apple-system, 'Noto Sans KR', Arial";
+    ctx.fillText(`HI ${state.hi.toString().padStart(5, "0")}`, canvas.width - 190, 48);
+
+    // subtle start hint if not started
+    if (!state.started) {
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "600 14px system-ui, -apple-system, 'Noto Sans KR', Arial";
+      ctx.fillText("Tap / Space to Start", 18, 28);
+    }
+    ctx.restore();
+  }
+
+  function drawParticles() {
+    for (const p of state.particles) {
+      const a = 1 - (p.t / p.life);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = "#cbd5e1";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // --------- Sprites (vector drawings) ----------
+  function drawPenguin(x, y) {
+    // penguin with scarf (winter vibe)
+    const bob = state.running ? Math.sin(state.t * 12) * 1.2 : 0;
+    const px = x;
+    const py = y + bob;
+
+    ctx.save();
+    ctx.translate(px, py);
+
+    // shadow
+    ctx.fillStyle = "rgba(0,0,0,0.10)";
+    ctx.beginPath();
+    ctx.ellipse(0, 6, 22, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // body (black)
+    ctx.fillStyle = "#111827";
+    roundedEllipse(0, -32, 22, 30);
+
+    // belly (white)
+    ctx.fillStyle = "#f9fafb";
+    roundedEllipse(0, -28, 14, 20);
+
+    // head
+    ctx.fillStyle = "#111827";
+    roundedEllipse(0, -60, 18, 18);
+
+    // face patch
+    ctx.fillStyle = "#f9fafb";
+    roundedEllipse(0, -60, 12, 10);
+
+    // eyes
+    ctx.fillStyle = "#111827";
+    dot(-5, -62, 2.2);
+    dot( 5, -62, 2.2);
+
+    // beak
+    ctx.fillStyle = "#f59e0b";
+    ctx.beginPath();
+    ctx.moveTo(0, -56);
+    ctx.lineTo(10, -52);
+    ctx.lineTo(0, -48);
+    ctx.closePath();
+    ctx.fill();
+
+    // scarf (Seoul runner accent)
+    ctx.fillStyle = "#ef4444";
+    ctx.beginPath();
+    ctx.roundRect(-18, -48, 36, 10, 6);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(10, -46, 14, 22, 6);
+    ctx.fill();
+
+    // legs
+    ctx.fillStyle = "#111827";
+    ctx.fillRect(-10, -6, 8, 10);
+    ctx.fillRect( 2, -6, 8, 10);
+
+    // feet
+    ctx.fillStyle = "#f59e0b";
+    ctx.beginPath(); ctx.roundRect(-14, 2, 16, 6, 4); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(0, 2, 16, 6, 4); ctx.fill();
+
+    // wing motion
+    const flap = state.running ? Math.sin(state.t * 18) * 0.25 : 0;
+    ctx.fillStyle = "#0b1220";
+    ctx.save();
+    ctx.translate(-18, -36);
+    ctx.rotate(-0.6 + flap);
+    ctx.beginPath();
+    ctx.roundRect(-4, -4, 20, 10, 8);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(18, -36);
+    ctx.rotate(0.6 - flap);
+    ctx.beginPath();
+    ctx.roundRect(-16, -4, 20, 10, 8);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  function drawZombie(ob) {
+    const x = ob.x;
+    const y = ob.y;
+
+    // wobble
+    const wob = Math.sin(ob.phase) * 1.2;
+
+    ctx.save();
+    ctx.translate(x, y + wob);
+
+    // shadow
+    ctx.fillStyle = "rgba(0,0,0,0.10)";
+    ctx.beginPath();
+    ctx.ellipse(0, 6, ob.w * 0.46, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // body (green-ish zombie)
+    ctx.fillStyle = "#16a34a";
+    ctx.beginPath();
+    ctx.roundRect(-ob.w/2, -ob.h + 10, ob.w, ob.h - 10, 10);
+    ctx.fill();
+
+    // face
+    ctx.fillStyle = "#22c55e";
+    ctx.beginPath();
+    ctx.roundRect(-ob.w/2 + 6, -ob.h + 8, ob.w - 12, 26, 10);
+    ctx.fill();
+
+    // eyes
+    ctx.fillStyle = "#111827";
+    dot(-8, -ob.h + 20, 2.4);
+    dot( 8, -ob.h + 20, 2.4);
+
+    // mouth
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-8, -ob.h + 28);
+    ctx.lineTo(8, -ob.h + 28);
+    ctx.stroke();
+
+    // arms
+    ctx.fillStyle = "#15803d";
+    ctx.beginPath();
+    ctx.roundRect(-ob.w/2 - 10, -ob.h + 36, 18, 10, 6);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(ob.w/2 - 8, -ob.h + 44, 18, 10, 6);
+    ctx.fill();
+
+    // feet
+    ctx.fillStyle = "#065f46";
+    ctx.beginPath(); ctx.roundRect(-ob.w/2 + 6, -6, 16, 8, 4); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(ob.w/2 - 22, -6, 16, 8, 4); ctx.fill();
+
+    // Seoul-themed accessories by kind
+    if (ob.type.kind === "hat") {
+      // gat-like hat silhouette (Korean traditional hat vibe)
+      ctx.fillStyle = "#111827";
+      ctx.beginPath();
+      ctx.ellipse(0, -ob.h + 6, ob.w*0.55, 6, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(-ob.w*0.22, -ob.h - 18, ob.w*0.44, 20, 8);
+      ctx.fill();
+      // chin string
+      ctx.strokeStyle = "#111827";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-8, -ob.h + 6);
+      ctx.lineTo(-14, -ob.h + 26);
+      ctx.stroke();
+    } else if (ob.type.kind === "box") {
+      // delivery box / parcel (Seoul delivery vibe)
+      ctx.fillStyle = "#f97316";
+      ctx.beginPath();
+      ctx.roundRect(-ob.w*0.45, -ob.h + 44, ob.w*0.90, 22, 6);
+      ctx.fill();
+      ctx.fillStyle = "#111827";
+      ctx.font = "800 10px system-ui, -apple-system, 'Noto Sans KR', Arial";
+      ctx.fillText("SEOUL", -16, -ob.h + 59);
+    } else if (ob.type.kind === "tall") {
+      // subway card / pass (T-money vibe)
+      ctx.fillStyle = "#3b82f6";
+      ctx.beginPath();
+      ctx.roundRect(-ob.w*0.28, -ob.h + 42, ob.w*0.56, 28, 8);
+      ctx.fill();
+      ctx.fillStyle = "#e5e7eb";
+      dot(0, -ob.h + 52, 2.4);
+      ctx.fillRect(-10, -ob.h + 58, 20, 3);
+    } else {
+      // basic: little torn jacket line
+      ctx.strokeStyle = "rgba(17,24,39,0.35)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-ob.w/2 + 8, -ob.h + 44);
+      ctx.lineTo(ob.w/2 - 8, -ob.h + 44);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  // --------- Shape helpers ----------
+  function dot(x, y, r) {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  function roundedEllipse(cx, cy, rx, ry) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // --------- Main loop ----------
+  function loop(ts) {
+    if (!state.lastTime) state.lastTime = ts;
+    const dt = clamp((ts - state.lastTime) / 1000, 0, 0.033); // clamp to avoid big jumps
+    state.lastTime = ts;
+
+    update(dt);
+    draw();
+
+    // overlay restart by tap when game over
+    if (state.over) {
+      overlay.style.pointerEvents = "auto";
+      overlay.onclick = () => restartGame();
+    } else {
+      overlay.style.pointerEvents = "none";
+      overlay.onclick = null;
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  // --------- Start ----------
+  resetGame();
+  requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
