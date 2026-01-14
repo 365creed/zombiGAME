@@ -1,0 +1,178 @@
+:root{
+  --paper:#f1e6c8;
+  --paper2:#eadbb4;
+  --ink:#0f172a;          /* 거의 검정 */
+  --inkSoft:rgba(15,23,42,.65);
+  --line:rgba(15,23,42,.18);
+  --glow:rgba(15,23,42,.10);
+  --radius:18px;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--paper);font-family:system-ui,-apple-system,"Noto Sans KR",Arial}
+.app{height:100%;display:flex;flex-direction:column}
+
+.topbar{
+  display:flex;gap:12px;align-items:flex-start;justify-content:space-between;
+  padding:12px 12px 10px;
+  border-bottom:1px solid var(--line);
+  background:
+    radial-gradient(1000px 300px at 10% 0%, rgba(255,255,255,.22), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,0));
+}
+
+.brand__title{
+  font-weight:950; letter-spacing:-.03em; font-size:20px; color:rgba(15,23,42,.92);
+}
+.brand__sub{
+  margin-top:2px; font-size:12px; color:rgba(15,23,42,.55); font-weight:800;
+}
+
+.hud{min-width:250px;max-width:420px}
+.hud__row{display:flex;gap:10px;align-items:center}
+.hud__row--small{margin-top:8px;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+
+.meter{
+  display:flex;gap:8px;align-items:center;
+  background:rgba(255,255,255,.35);
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:6px 10px;
+  box-shadow:0 10px 18px rgba(0,0,0,.06);
+}
+.meter__label{font-size:12px;font-weight:950;color:rgba(15,23,42,.75)}
+.meter__bar{
+  width:120px;height:10px;border-radius:999px;overflow:hidden;
+  background:rgba(15,23,42,.10);
+}
+.meter__fill{
+  height:100%;width:60%;
+  background:linear-gradient(90deg, rgba(15,23,42,.85), rgba(15,23,42,.55));
+  border-radius:999px;
+  box-shadow:0 0 18px var(--glow);
+}
+
+.pill{
+  background:rgba(255,255,255,.35);
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:6px 10px;
+  color:rgba(15,23,42,.70);
+  font-size:12px;
+  font-weight:900;
+}
+
+.stage{
+  position:relative;
+  flex:1;
+  display:grid;
+  place-items:center;
+  padding:10px;
+  background:
+    radial-gradient(900px 600px at 50% 20%, rgba(15,23,42,.06), transparent 60%),
+    radial-gradient(1100px 900px at 50% 90%, rgba(15,23,42,.05), transparent 60%);
+}
+
+canvas{
+  width:min(92vw, 480px);
+  height:auto;
+  border-radius:20px;
+  border:1px solid var(--line);
+  box-shadow:0 20px 50px rgba(0,0,0,.10);
+  background:var(--paper);
+  touch-action:none;
+}
+
+.overlay{
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  padding:18px;
+}
+.panel{
+  width:min(560px, 94vw);
+  background:rgba(241,230,200,.92);
+  border:1px solid rgba(15,23,42,.20);
+  border-radius:18px;
+  padding:16px;
+  box-shadow:0 18px 50px rgba(0,0,0,.14);
+  backdrop-filter: blur(6px);
+}
+.panel h2{margin:0 0 6px;font-size:18px;letter-spacing:-.02em;color:rgba(15,23,42,.90)}
+.panel p{margin:0;color:rgba(15,23,42,.70);font-size:13px;line-height:1.6}
+.panel__btns{margin-top:12px;display:flex;gap:10px;justify-content:center}
+
+.btn{
+  border:1px solid rgba(15,23,42,.20);
+  background:rgba(255,255,255,.35);
+  border-radius:12px;
+  padding:10px 14px;
+  font-weight:950;
+  cursor:pointer;
+}
+.btn--ink{
+  background:linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.68));
+  color:rgba(241,230,200,.96);
+  border-color:rgba(15,23,42,.65);
+  box-shadow:0 14px 30px rgba(0,0,0,.18);
+}
+
+.foot{
+  padding:10px 12px;
+  border-top:1px solid var(--line);
+  background:linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,.20));
+  color:rgba(15,23,42,.60);
+  font-size:12px;
+  font-weight:800;
+}
+
+/* Touch UI */
+.touch{position:absolute; inset:0; pointer-events:none;}
+.stick{
+  position:absolute; left:18px; bottom:80px;
+  width:150px; height:150px; display:none;
+}
+.stick__base{
+  position:absolute; inset:0;
+  border-radius:999px;
+  background:rgba(255,255,255,.12);
+  border:1px solid rgba(15,23,42,.18);
+  box-shadow:0 18px 40px rgba(0,0,0,.10);
+}
+.stick__knob{
+  position:absolute; left:50%; top:50%;
+  width:62px; height:62px; transform:translate(-50%,-50%);
+  border-radius:999px;
+  background:rgba(15,23,42,.22);
+  border:1px solid rgba(15,23,42,.25);
+}
+
+.pad{
+  position:absolute; right:14px; bottom:72px;
+  display:none;
+  gap:10px;
+  grid-template-columns:repeat(2, 1fr);
+}
+.abtn{
+  pointer-events:auto;
+  border:1px solid rgba(15,23,42,.20);
+  background:rgba(255,255,255,.25);
+  color:rgba(15,23,42,.85);
+  font-weight:950;
+  border-radius:14px;
+  padding:12px 14px;
+  min-width:88px;
+  box-shadow:0 16px 36px rgba(0,0,0,.12);
+}
+.abtn--big{
+  grid-column:1 / span 2;
+  background:linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.70));
+  color:rgba(241,230,200,.96);
+  border-color:rgba(15,23,42,.55);
+}
+
+/* 모바일에서 터치 UI 보이게 */
+@media (max-width: 720px){
+  .stick{display:block}
+  .pad{display:grid}
+  .hud{min-width:220px}
+}
