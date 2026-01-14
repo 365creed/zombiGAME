@@ -3,37 +3,44 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Seoul Rush — Ink Runner</title>
+  <title>묵검(墨劍) — Ink Sword</title>
   <style>
-    html,body{margin:0;height:100%;background:#f6f7fb;font-family:system-ui,-apple-system,"Noto Sans KR",Arial}
+    html,body{margin:0;height:100%;background:#e9e2cf;font-family:system-ui,-apple-system,"Noto Sans KR",Arial}
     .wrap{height:100%;display:grid;place-items:center;padding:14px}
     .card{
-      width:min(980px,96vw); background:#fff; border:1px solid #e7e9ef;
-      border-radius:18px; box-shadow:0 12px 30px rgba(0,0,0,.06); overflow:hidden;
+      width:min(1040px,96vw); background:#f1e8d2; border:1px solid rgba(15,23,42,.15);
+      border-radius:18px; box-shadow:0 12px 30px rgba(0,0,0,.08); overflow:hidden;
     }
-    .topbar{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #eef0f6}
-    .title{font-weight:900;letter-spacing:-.02em}
-    .hint{color:#6b7280;font-size:13px;line-height:1.25}
-    .kbd{display:inline-block;padding:2px 8px;border:1px solid #d8dbe6;border-radius:999px;background:#fff;font-weight:900;color:#111827;font-size:12px}
+    .topbar{
+      display:flex;gap:10px;align-items:center;justify-content:space-between;
+      padding:10px 14px;border-bottom:1px solid rgba(15,23,42,.10);
+      background:linear-gradient(180deg, rgba(255,255,255,.20), rgba(255,255,255,0));
+    }
+    .title{font-weight:900;letter-spacing:-.02em;color:rgba(15,23,42,.90)}
+    .hint{color:rgba(15,23,42,.65);font-size:13px;line-height:1.25}
+    .kbd{
+      display:inline-block;padding:2px 8px;border:1px solid rgba(15,23,42,.22);
+      border-radius:999px;background:rgba(255,255,255,.55);font-weight:900;color:rgba(15,23,42,.9);font-size:12px
+    }
     .stage{position:relative}
-    canvas{display:block;width:100%;height:auto;background:#fff;touch-action:none}
+    canvas{display:block;width:100%;height:auto;touch-action:none;background:#f1e8d2}
     .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
     .panel{
-      text-align:center;background:rgba(255,255,255,.92);border:1px solid #e7e9ef;border-radius:16px;
-      padding:16px; width:min(560px,92vw); box-shadow:0 14px 34px rgba(0,0,0,.10)
+      text-align:center;background:rgba(241,232,210,.92);border:1px solid rgba(15,23,42,.18);
+      border-radius:16px;padding:16px;width:min(560px,92vw);box-shadow:0 14px 34px rgba(0,0,0,.12)
     }
-    .panel h2{margin:0 0 6px;font-size:18px;letter-spacing:-.02em}
-    .panel p{margin:0;color:#6b7280;font-size:13px;line-height:1.55}
+    .panel h2{margin:0 0 6px;font-size:18px;letter-spacing:-.02em;color:rgba(15,23,42,.92)}
+    .panel p{margin:0;color:rgba(15,23,42,.70);font-size:13px;line-height:1.55}
   </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
     <div class="topbar">
-      <div class="title">Seoul Rush — Ink Runner (광활지 + 구르기 대시)</div>
+      <div class="title">묵검(墨劍) — 종이 위 먹으로 그린 검 전투</div>
       <div class="hint">
-        이동: <span class="kbd">←</span><span class="kbd">→</span> (부드러운 이동) · 대시(구르기): <span class="kbd">Shift</span> · 재시작: <span class="kbd">R</span><br/>
-        모바일: 드래그로 이동 · 두 손가락 탭(또는 상단 탭) = 대시
+        이동: <span class="kbd">←</span><span class="kbd">→</span> · 점프: <span class="kbd">Space</span> · 베기: <span class="kbd">J</span> · 구르기: <span class="kbd">K</span> · 재시작: <span class="kbd">R</span><br/>
+        모바일: 좌/우 드래그 이동 · 탭=베기 · 두 손가락 탭=구르기 · 위쪽 탭=점프
       </div>
     </div>
 
@@ -43,10 +50,9 @@
         <div class="panel" id="pn">
           <h2>시작하기</h2>
           <p>
-            트랙이 아니라 <b>광활한 들판</b>을 자유롭게 달립니다.<br/>
-            좀비는 <b>흔들/추격</b>하며 정면으로 다가옵니다.<br/>
-            <b>Shift</b>로 옆으로 <b>구르기 대시</b>(무적) · 아이템으로 대시 충전<br/>
-            시작: <span class="kbd">Space</span> / 화면 탭
+            누런 종이 위 검은 먹으로만 그려진 세계.<br/>
+            검객이 되어 <b>베기(J)</b>로 적을 쓰러뜨리세요. <b>구르기(K)</b>는 잠깐 무적입니다.<br/>
+            시작: <span class="kbd">Enter</span> / 화면 탭
           </p>
         </div>
       </div>
@@ -69,7 +75,7 @@
   fit();
 
   // ---------- Storage ----------
-  const HI_KEY = "seoul_rush_hi_ink_v1";
+  const HI_KEY = "ink_sword_hi_v1";
   const loadHi = () => Number(localStorage.getItem(HI_KEY) || "0");
   const saveHi = (v) => localStorage.setItem(HI_KEY, String(v));
 
@@ -78,227 +84,185 @@
   const lerp = (a,b,t)=>a+(b-a)*t;
   const rand = (a,b)=>a+Math.random()*(b-a);
   const randi = (a,b)=>Math.floor(rand(a,b+1));
-  const smooth01 = (t)=>t*t*(3-2*t);
-  const easeOutCubic = (t)=>1-Math.pow(1-t,3);
+  const easeOut = (t)=>1-Math.pow(1-t,3);
 
-  // ---------- Ink-ish rendering helpers ----------
-  // Paper noise cache
+  // ---------- Paper texture ----------
   const paper = document.createElement("canvas");
   paper.width = 512; paper.height = 512;
   const pctx = paper.getContext("2d");
   (function makePaper(){
-    pctx.fillStyle = "#fbfbf8";
+    pctx.fillStyle = "#f1e8d2";
     pctx.fillRect(0,0,paper.width,paper.height);
-    // subtle fibers
-    for(let i=0;i<9000;i++){
+    // fibers
+    for(let i=0;i<12000;i++){
       const x = Math.random()*paper.width;
       const y = Math.random()*paper.height;
       const a = Math.random()*0.06;
       pctx.fillStyle = `rgba(15,23,42,${a})`;
       pctx.fillRect(x,y,1,1);
     }
-    // faint wash
-    const g = pctx.createRadialGradient(160,140,20, 280,240,380);
-    g.addColorStop(0,"rgba(30,41,59,0.05)");
-    g.addColorStop(1,"rgba(30,41,59,0)");
+    // warm wash
+    const g = pctx.createRadialGradient(180,160,30, 280,260,420);
+    g.addColorStop(0,"rgba(15,23,42,0.06)");
+    g.addColorStop(1,"rgba(15,23,42,0)");
     pctx.fillStyle = g;
     pctx.fillRect(0,0,paper.width,paper.height);
   })();
 
-  function inkStrokePath(points, width, alpha){
-    // draw slightly jittered strokes to mimic brush
+  // ---------- Ink brush primitives (BLACK ONLY) ----------
+  function inkAlpha(a){ return `rgba(15,23,42,${a})`; }
+
+  function brushStroke(points, w, a){
     ctx.save();
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = `rgba(15,23,42,${alpha})`;
-    for(let k=0;k<2;k++){
-      ctx.lineWidth = width * (k===0 ? 1.0 : 0.72);
+    ctx.lineCap="round"; ctx.lineJoin="round";
+    for(let pass=0; pass<2; pass++){
+      ctx.strokeStyle = inkAlpha(a*(pass===0?1:0.7));
+      ctx.lineWidth = w*(pass===0?1:0.7);
       ctx.beginPath();
       for(let i=0;i<points.length;i++){
         const pt = points[i];
-        const jx = (Math.random()*2-1) * (k===0?0.6:1.0);
-        const jy = (Math.random()*2-1) * (k===0?0.6:1.0);
-        if(i===0) ctx.moveTo(pt.x + jx, pt.y + jy);
-        else ctx.lineTo(pt.x + jx, pt.y + jy);
+        const j = (pass===0?0.6:1.2);
+        const x = pt.x + (Math.random()*2-1)*j;
+        const y = pt.y + (Math.random()*2-1)*j;
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
       }
       ctx.stroke();
     }
     ctx.restore();
   }
 
-  function inkFillRect(x,y,w,h, alpha){
-    // washed fill
+  function washCircle(x,y,r,a){
     ctx.save();
-    ctx.fillStyle = `rgba(15,23,42,${alpha})`;
-    ctx.fillRect(x,y,w,h);
+    ctx.fillStyle = inkAlpha(a);
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
 
-  // ---------- tiny audio ----------
-  let audioCtx = null;
-  function beep(type="ok"){
-    if(!audioCtx) return;
-    const t = audioCtx.currentTime;
-    const o = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    o.type = "triangle";
-    o.frequency.value = (type==="hit") ? 160 : (type==="dash" ? 520 : 340);
-    g.gain.value = 0.0001;
-    o.connect(g); g.connect(audioCtx.destination);
-    o.start(t);
-    g.gain.exponentialRampToValueAtTime(0.06, t+0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + (type==="hit"?0.14:0.09));
-    o.stop(t + (type==="hit"?0.15:0.10));
-  }
-  function vibrate(ms){
-    try{ if(navigator.vibrate) navigator.vibrate(ms); }catch{}
+  function splatter(x,y, power=1){
+    // ink splashes (black only)
+    for(let i=0;i<18;i++){
+      const ang = Math.random()*Math.PI*2;
+      const d = rand(2, 40) * power;
+      const rx = x + Math.cos(ang)*d;
+      const ry = y + Math.sin(ang)*d;
+      const rr = rand(1.2, 6.0) * power;
+      const aa = rand(0.05, 0.18);
+      washCircle(rx, ry, rr, aa);
+    }
   }
 
-  // ---------- World/Perspective (WIDE FIELD) ----------
-  // 트랙 느낌 제거: road 폭 크게(광활지), 가이드 라인 없음
-  const WORLD = {
-    cx: canvas.width/2,
-    horizonY: 118,
-    nearY: 534,
-    widthNear: 920,  // 넓게!
-    widthFar: 520,   // 멀리도 넓게
-    xLimit: 1.35,    // 플레이어가 누빌 수 있는 필드 범위(정규화)
-  };
-
-  function project(xNorm, z){
-    const p = clamp(z,0,1);
-    const w = lerp(WORLD.widthNear, WORLD.widthFar, p);
-    const x = WORLD.cx + xNorm * (w/2);
-    const y = lerp(WORLD.nearY, WORLD.horizonY, p);
-    const scale = lerp(1.45, 0.22, p);
-    return {x,y,scale,w};
-  }
-
-  // ---------- Chapters ----------
-  const CHAPTERS = [
-    { key:"hospital",  name:"응급 병원", bg:"hospital" },
-    { key:"gwang",     name:"광화문",    bg:"gwang" },
-    { key:"hangang",   name:"한강",      bg:"hangang" },
-    { key:"namsan",    name:"남산타워",  bg:"namsan" },
-    { key:"subway",    name:"지하철",    bg:"subway" },
-    { key:"palace",    name:"경복궁",    bg:"palace" },
-  ];
-
-  // ---------- State ----------
-  const state = {
-    started:false,
-    running:false,
-    over:false,
-    last:0,
-    t:0,
-    dt:0,
-
-    speed: 0.64,
-    speedMax: 1.55,
-    speedGain: 0.014,
-
-    score: 0,
-    hi: loadHi(),
-    danger: 0,
-
-    mobs: [],
-    items: [],
-    bgObjs: [],
-    particles: [],
-
-    spawnTimer: 0,
-    spawnEvery: 0.90,
-
-    chapterIndex: 0,
-    chapterTime: 0,
-    chapterLength: 18,
-    banner: 0,
-    bannerText: "",
-
-    hitFlash: 0,
-    shake: 0,
-  };
-
-  // ---------- Player (SMOOTH + ROLL DASH) ----------
-  const input = {
-    left:false,
-    right:false,
-    dashHeld:false,
-    dashPressed:false,   // edge-trigger
-    dragging:false,
-    pointerDown:false,
-    lastPointerX:0,
-    twoFingerTap:false,
-    lastMoveDir: 1,      // -1 or +1
-  };
-
-  const player = {
-    x: 0,          // current
-    v: 0,          // velocity
-    targetX: 0,    // where we want to go
-    invuln: 0,
-
-    dashCharge: 1,
-    dashCD: 0,
-
-    // dash animation
-    dashing:false,
-    dashT: 0,
-    dashDur: 0.22,
-    dashFrom: 0,
-    dashTo: 0,
-    roll: 0,       // rotation for roll
-  };
-
-  const ZOMBIE_TYPES = [
-    { key:"basic", style:"basic" },
-    { key:"hat", style:"hat" },
-    { key:"mask", style:"mask" },
-    { key:"nurse", style:"nurse" },
-    { key:"runner", style:"runner" },
-  ];
-
+  // ---------- UI overlay ----------
   function showOverlay(title, html){
-    ov.style.display = "flex";
+    ov.style.display="flex";
     pn.querySelector("h2").textContent = title;
     pn.querySelector("p").innerHTML = html;
   }
   function hideOverlay(){ ov.style.display="none"; }
 
-  function setChapter(idx, show=true){
-    state.chapterIndex = (idx + CHAPTERS.length) % CHAPTERS.length;
-    state.chapterTime = 0;
-    state.bannerText = CHAPTERS[state.chapterIndex].name;
-    if(show) state.banner = 1;
-
-    for(let i=0;i<4;i++) spawnBgSilhouette(CHAPTERS[state.chapterIndex].bg);
+  // ---------- Audio (tiny, optional) ----------
+  let audioCtx=null;
+  function beep(kind="ok"){
+    if(!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = "triangle";
+    o.frequency.value = (kind==="hit")?160:(kind==="slash"?520:(kind==="roll"?380:300));
+    g.gain.value = 0.0001;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t);
+    g.gain.exponentialRampToValueAtTime(0.06, t+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+(kind==="hit"?0.14:0.09));
+    o.stop(t+(kind==="hit"?0.15:0.10));
   }
+  function vibrate(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms); }catch{} }
 
+  // ---------- Game constants ----------
+  const G = 2200;         // gravity
+  const FLOOR_Y = 430;    // ground line
+  const WORLD_L = 70;
+  const WORLD_R = 890;
+
+  // ---------- State ----------
+  const state = {
+    started:false, running:false, over:false,
+    last:0, t:0,
+    score:0, hi:loadHi(),
+    wave:1,
+    danger:0,
+
+    enemies: [],
+    particles: [],
+
+    spawnTimer:0,
+    spawnEvery:1.2,
+
+    // hit effects
+    shake:0,
+    flash:0, // ink veil
+    combo:0,
+    comboT:0,
+  };
+
+  const input = {
+    left:false, right:false,
+    jumpPressed:false,
+    slashPressed:false,
+    rollPressed:false,
+    // mobile
+    pointerDown:false,
+    lastPointerX:0,
+    drag:false,
+    twoFingerTap:false,
+  };
+
+  const player = {
+    x: 210,
+    y: FLOOR_Y,
+    vx: 0,
+    vy: 0,
+    face: 1,        // 1 right, -1 left
+
+    hp: 3,
+
+    // combat
+    slashing:false,
+    slashT:0,
+    slashDur:0.18,
+    slashCD:0,
+
+    rolling:false,
+    rollT:0,
+    rollDur:0.26,
+    rollCD:0,
+    invuln:0,
+
+    // smooth movement target
+    targetX: 210,
+  };
+
+  // ---------- Start/reset ----------
   function reset(){
     state.started=false; state.running=false; state.over=false;
-    state.last=0; state.t=0; state.score=0;
-    state.speed=0.64; state.danger=0;
+    state.last=0; state.t=0;
+    state.score=0; state.wave=1; state.danger=0;
+    state.enemies.length=0;
+    state.particles.length=0;
+    state.spawnTimer=0; state.spawnEvery=1.2;
+    state.shake=0; state.flash=0;
+    state.combo=0; state.comboT=0;
 
-    state.mobs.length=0; state.items.length=0; state.bgObjs.length=0; state.particles.length=0;
-    state.spawnTimer=0; state.spawnEvery=0.90;
-
-    state.hitFlash=0; state.shake=0;
-
-    player.x=0; player.v=0; player.targetX=0;
+    player.x=210; player.y=FLOOR_Y; player.vx=0; player.vy=0; player.face=1;
+    player.hp=3;
+    player.slashing=false; player.slashT=0; player.slashCD=0;
+    player.rolling=false; player.rollT=0; player.rollCD=0;
     player.invuln=0;
-    player.dashCharge=1; player.dashCD=0;
-    player.dashing=false; player.dashT=0; player.roll=0;
+    player.targetX=210;
 
-    input.left=false; input.right=false; input.dashHeld=false; input.dashPressed=false;
-    input.dragging=false; input.pointerDown=false; input.twoFingerTap=false; input.lastMoveDir=1;
-
-    setChapter(0, true);
-
-    showOverlay(
-      "시작하기",
-      `광활지(트랙 없음) 위를 자유롭게 달립니다.<br/>
-       이동은 <b>스프링</b>처럼 부드럽게 · 대시는 <b>옆으로 구르기</b><br/>
-       시작: <span class="kbd">Space</span> / 화면 탭`
+    showOverlay("시작하기",
+      `검은 먹으로만 표현된 세계.<br/>
+       베기: <span class="kbd">J</span> · 구르기(무적): <span class="kbd">K</span> · 점프: <span class="kbd">Space</span><br/>
+       시작: <span class="kbd">Enter</span> / 화면 탭`
     );
   }
 
@@ -306,757 +270,545 @@
     state.started=true; state.running=true; state.over=false;
     hideOverlay();
     if(!audioCtx){
-      try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch{}
+      try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch{}
     }
     beep("ok");
   }
 
   function gameOver(){
     state.running=false; state.over=true;
+
     const s = Math.floor(state.score);
     if(s > state.hi){ state.hi=s; saveHi(state.hi); }
-    showOverlay("GAME OVER", `점수: <b>${s}</b> · 최고: <b>${state.hi}</b><br/>재시작: <span class="kbd">R</span> / 화면 탭`);
+
+    showOverlay("패배",
+      `점수: <b>${s}</b> · 최고: <b>${state.hi}</b><br/>
+       재시작: <span class="kbd">R</span> / 화면 탭`
+    );
   }
 
-  // ---------- Spawns ----------
-  function spawnBgSilhouette(kind){
-    const side = Math.random()<0.5 ? -1 : 1;
-    const xNorm = side * rand(1.05, 1.95);
-    state.bgObjs.push({ kind, xNorm, z: rand(0.86, 1.30), wob: rand(0,Math.PI*2) });
-  }
-
-  function spawnZombie(){
-    const d = state.danger;
-    const poolMax = Math.max(2, Math.floor(2 + d*(ZOMBIE_TYPES.length-2)));
-    const type = ZOMBIE_TYPES[randi(0, poolMax)];
-
-    // 넓은 필드 전체에서 등장
-    const x = rand(-WORLD.xLimit, WORLD.xLimit);
-    const z = rand(0.86, 1.14);
-
-    const roll = Math.random();
-    const behavior = (roll < 0.42) ? "sway" : (roll < 0.86 ? "chase" : "zigzag");
-
-    state.mobs.push({
-      type,
-      x, z,
-      phase: rand(0, Math.PI*2),
-      swayAmp: rand(0.06, 0.18),
-      swaySpd: rand(1.7, 3.2),
-      chaseAggro: rand(0.35, 0.90),
-      bob: rand(0, Math.PI*2),
-      behavior,
-    });
-  }
-
-  function spawnDashItem(){
-    state.items.push({
-      x: rand(-WORLD.xLimit, WORLD.xLimit),
-      z: rand(0.92, 1.20),
-      wob: rand(0, Math.PI*2)
-    });
-  }
-
-  // ---------- Input ----------
+  // ---------- Input: keyboard ----------
   window.addEventListener("keydown", (e)=>{
-    if(e.code==="ArrowLeft"){ e.preventDefault(); if(!state.started) startGame(); input.left=true; input.lastMoveDir=-1; }
-    if(e.code==="ArrowRight"){ e.preventDefault(); if(!state.started) startGame(); input.right=true; input.lastMoveDir=+1; }
-    if(e.code==="Space"){ e.preventDefault(); if(!state.started) startGame(); }
+    if(e.code==="ArrowLeft"){ e.preventDefault(); if(!state.started) startGame(); input.left=true; player.face=-1; }
+    if(e.code==="ArrowRight"){ e.preventDefault(); if(!state.started) startGame(); input.right=true; player.face=+1; }
+    if(e.code==="Space"){ e.preventDefault(); if(!state.started) startGame(); input.jumpPressed=true; }
+    if(e.code==="KeyJ"){ e.preventDefault(); if(!state.started) startGame(); input.slashPressed=true; }
+    if(e.code==="KeyK"){ e.preventDefault(); if(!state.started) startGame(); input.rollPressed=true; }
+    if(e.code==="Enter"){ e.preventDefault(); if(!state.started) startGame(); }
     if(e.code==="KeyR"){ e.preventDefault(); reset(); }
-
-    if(e.code==="ShiftLeft"||e.code==="ShiftRight"){
-      e.preventDefault();
-      if(!state.started) startGame();
-      if(!input.dashHeld){ // edge
-        input.dashPressed = true;
-      }
-      input.dashHeld = true;
-    }
   }, {passive:false});
-
   window.addEventListener("keyup", (e)=>{
     if(e.code==="ArrowLeft") input.left=false;
     if(e.code==="ArrowRight") input.right=false;
-    if(e.code==="ShiftLeft"||e.code==="ShiftRight") input.dashHeld=false;
   });
 
-  // pointer drag: set targetX smoothly
+  // ---------- Input: mobile ----------
   canvas.addEventListener("pointerdown", (e)=>{
     e.preventDefault();
     if(!state.started){ startGame(); return; }
     if(state.over){ reset(); return; }
 
     input.pointerDown=true;
-    input.dragging=true;
+    input.drag=true;
     input.lastPointerX = e.clientX;
     canvas.setPointerCapture(e.pointerId);
+
+    // single tap => slash (if not dragging much)
+    input.slashPressed = true;
   }, {passive:false});
 
   canvas.addEventListener("pointermove", (e)=>{
     if(!input.pointerDown) return;
     const dx = e.clientX - input.lastPointerX;
     input.lastPointerX = e.clientX;
+
     const rect = canvas.getBoundingClientRect();
     const ndx = dx / rect.width;
+    player.targetX += ndx * 900; // pixel-ish scale
+    player.targetX = clamp(player.targetX, WORLD_L, WORLD_R);
 
-    // drag -> targetX 변경
-    player.targetX += ndx * 3.0; // sensitivity
-    player.targetX = clamp(player.targetX, -WORLD.xLimit, WORLD.xLimit);
-    input.lastMoveDir = (dx < 0) ? -1 : +1;
+    if(Math.abs(dx) > 6) input.slashPressed = false; // it was a drag, cancel tap-slash
   });
 
-  canvas.addEventListener("pointerup", ()=>{ input.pointerDown=false; input.dragging=false; });
-  canvas.addEventListener("pointercancel", ()=>{ input.pointerDown=false; input.dragging=false; });
+  canvas.addEventListener("pointerup", ()=>{ input.pointerDown=false; input.drag=false; });
+  canvas.addEventListener("pointercancel", ()=>{ input.pointerDown=false; input.drag=false; });
 
-  // two-finger tap => dash (mobile)
+  // two-finger tap => roll
   canvas.addEventListener("touchstart", (e)=>{
-    if(e.touches && e.touches.length === 2){
+    if(e.touches && e.touches.length===2){
+      input.rollPressed = true;
       input.twoFingerTap = true;
-      input.dashPressed = true;
-      input.dashHeld = true;
-      setTimeout(()=>{ input.dashHeld=false; input.twoFingerTap=false; }, 80);
+      setTimeout(()=>input.twoFingerTap=false, 120);
+    } else {
+      // top area tap => jump
+      const rect = canvas.getBoundingClientRect();
+      const y = e.touches[0].clientY - rect.top;
+      if(y < rect.height*0.28) input.jumpPressed = true;
     }
   }, {passive:true});
 
-  ov.addEventListener("pointerdown", (e)=>{
-    e.preventDefault();
-    if(!state.started) startGame();
-    else if(state.over) reset();
-  }, {passive:false});
+  // ---------- Combat helpers ----------
+  function tryJump(){
+    if(player.y >= FLOOR_Y-0.5){
+      player.vy = -860;
+      splatter(player.x, player.y-60, 0.5);
+      beep("ok");
+      vibrate(12);
+    }
+  }
 
-  // ---------- Dash (ROLL) ----------
-  function tryDash(){
-    if(player.dashing) return;
-    if(player.dashCD > 0) return;
-    if(player.dashCharge <= 0) return;
-
-    // dash direction: current input direction 우선
-    let dir = 0;
-    if(input.left && !input.right) dir = -1;
-    else if(input.right && !input.left) dir = +1;
-    else dir = input.lastMoveDir || (player.v>=0 ? +1 : -1);
-
-    const dist = 0.72; // 옆으로 크게 이동(광활지 느낌)
-    const from = player.x;
-    const to = clamp(from + dist*dir, -WORLD.xLimit, WORLD.xLimit);
-
-    player.dashCharge -= 1;
-    player.dashing = true;
-    player.dashT = 0;
-    player.dashFrom = from;
-    player.dashTo = to;
-
-    player.invuln = Math.max(player.invuln, 0.42);
-    player.dashCD = 0.28;
-
-    // damp movement a bit so it feels crisp
-    player.v *= 0.25;
-    player.targetX = to;
-
-    state.shake = 6;
-    beep("dash");
+  function tryRoll(){
+    if(player.rollCD>0 || player.rolling) return;
+    player.rolling=true;
+    player.rollT=0;
+    player.rollCD=0.40;
+    player.invuln = Math.max(player.invuln, 0.30);
+    // burst speed
+    player.vx += 860 * player.face;
+    beep("roll");
     vibrate(18);
+    splatter(player.x, player.y-20, 0.7);
   }
 
-  // ---------- Collision ----------
-  function hitTest(m){
-    const hitZ = 0.10;
-    if(m.z > hitZ) return false;
-    // 광활지에서는 충돌 폭 조금 타이트하게
-    const thresh = 0.24;
-    return Math.abs(m.x - player.x) < thresh;
+  function trySlash(){
+    if(player.slashCD>0 || player.slashing) return;
+    player.slashing=true;
+    player.slashT=0;
+    player.slashCD=0.22;
+    beep("slash");
+    vibrate(10);
   }
 
-  function itemTest(it){
-    const hitZ = 0.12;
-    if(it.z > hitZ) return false;
-    return Math.abs(it.x - player.x) < 0.30;
+  function slashHitbox(){
+    // arc in front of player
+    const reach = 96;
+    const hx = player.x + player.face*(60);
+    const hy = player.y - 70;
+    return {x:hx, y:hy, r:reach};
   }
 
-  function spawnPickupParticles(x){
-    for(let i=0;i<14;i++){
-      state.particles.push({
-        x: x + rand(-0.08,0.08),
-        z: 0.10 + rand(0.0,0.05),
-        vx: rand(-0.6,0.6),
-        vz: rand(0.25, 0.8),
-        life: rand(0.22, 0.42),
-        t: 0
-      });
-    }
-  }
-  function spawnHitParticles(){
-    for(let i=0;i<18;i++){
-      state.particles.push({
-        x: player.x + rand(-0.10,0.10),
-        z: 0.06 + rand(-0.02,0.02),
-        vx: rand(-0.8,0.8),
-        vz: rand(0.35, 1.15),
-        life: rand(0.25, 0.5),
-        t: 0
-      });
-    }
+  function damagePlayer(){
+    if(player.invuln>0) return;
+    player.hp -= 1;
+    state.flash = 1;
+    state.shake = 10;
+    splatter(player.x, player.y-60, 1.1);
+    beep("hit");
+    vibrate(60);
+    player.invuln = 0.65;
+    state.combo = 0;
+    state.comboT = 0;
+
+    if(player.hp <= 0) gameOver();
   }
 
-  // ---------- Update ----------
-  function update(dt){
-    state.dt = dt;
-    state.t += dt;
+  // ---------- Enemy spawn / AI ----------
+  function spawnEnemy(){
+    const side = Math.random()<0.5 ? -1 : 1;
+    const x = side<0 ? rand(WORLD_L, WORLD_L+40) : rand(WORLD_R-40, WORLD_R);
+    const speed = rand(120, 200) * (1 + state.wave*0.08);
 
-    if(state.banner > 0) state.banner = Math.max(0, state.banner - dt*0.6);
-    state.hitFlash = Math.max(0, state.hitFlash - dt*2.8);
-    state.shake = Math.max(0, state.shake - dt*18);
-
-    if(!state.running){
-      // clear edge trigger even if paused
-      input.dashPressed = false;
-      return;
-    }
-
-    // score/speed/difficulty
-    state.score += dt * (165 + state.speed*310);
-    state.danger = clamp(state.score/1600, 0, 1);
-    state.speed = clamp(state.speed + state.speedGain*dt, 0, state.speedMax);
-    state.spawnEvery = lerp(0.92, 0.48, state.danger);
-
-    // chapters
-    state.chapterTime += dt;
-    if(state.chapterTime >= state.chapterLength) setChapter(state.chapterIndex+1, true);
-
-    // bg spawn
-    if(Math.random() < dt * (0.85 + state.danger*1.8)) spawnBgSilhouette(CHAPTERS[state.chapterIndex].bg);
-
-    // occasional dash item
-    if(Math.random() < dt * (0.10 + (1-state.danger)*0.08)) spawnDashItem();
-
-    // movement target from keyboard when not dragging
-    if(!input.dragging){
-      const step = 1.35; // how fast target moves per second when key held
-      if(input.left)  player.targetX -= step * dt;
-      if(input.right) player.targetX += step * dt;
-      player.targetX = clamp(player.targetX, -WORLD.xLimit, WORLD.xLimit);
-    }
-
-    // dash press (edge-trigger) => reliable dash
-    if(input.dashPressed){
-      tryDash();
-      input.dashPressed = false; // consume
-    }
-
-    // cooldowns
-    player.dashCD = Math.max(0, player.dashCD - dt);
-    player.invuln = Math.max(0, player.invuln - dt);
-
-    // dash animation (roll + lateral tween)
-    if(player.dashing){
-      player.dashT += dt;
-      const t = clamp(player.dashT / player.dashDur, 0, 1);
-      const e = easeOutCubic(t);
-      player.x = lerp(player.dashFrom, player.dashTo, e);
-
-      // roll: rotate ~ 1 turn
-      player.roll = e * Math.PI * 2 * (player.dashTo > player.dashFrom ? 1 : -1);
-
-      if(t >= 1){
-        player.dashing = false;
-        player.roll = 0;
-        player.x = player.dashTo;
-      }
-    } else {
-      // smooth follow using spring dynamics (very smooth)
-      // critically-damped-ish spring
-      const k = 22;                 // stiffness
-      const c = 2*Math.sqrt(k);     // damping
-      const a = k*(player.targetX - player.x) - c*player.v;
-      player.v += a * dt;
-      player.x += player.v * dt;
-      player.x = clamp(player.x, -WORLD.xLimit, WORLD.xLimit);
-
-      // update lastMoveDir based on velocity
-      if(Math.abs(player.v) > 0.25) input.lastMoveDir = (player.v < 0) ? -1 : +1;
-    }
-
-    // spawns
-    state.spawnTimer += dt;
-    if(state.spawnTimer >= state.spawnEvery){
-      state.spawnTimer = 0;
-      spawnZombie();
-      if(state.danger > 0.50 && Math.random() < 0.34) spawnZombie();
-    }
-
-    // mobs update
-    for(const m of state.mobs){
-      m.z -= state.speed * dt;
-      m.phase += dt * m.swaySpd;
-      m.bob += dt * 8;
-
-      if(m.behavior === "sway"){
-        m.x += Math.sin(m.phase) * m.swayAmp * dt;
-      } else if(m.behavior === "zigzag"){
-        m.x += Math.sign(Math.sin(m.phase)) * m.swayAmp * dt * 1.8;
-      } else {
-        const desire = (player.x - m.x) * (0.85 + m.chaseAggro*1.8);
-        m.x += desire * dt * (0.60 + state.danger*0.65);
-        m.x += Math.sin(m.phase) * m.swayAmp * 0.22 * dt;
-      }
-
-      m.x = clamp(m.x, -WORLD.xLimit*1.10, WORLD.xLimit*1.10);
-    }
-
-    // items/bg
-    for(const it of state.items){ it.z -= state.speed * dt * 0.95; it.wob += dt*6; }
-    for(const b of state.bgObjs){ b.z -= state.speed * dt * 0.75; b.wob += dt*1.4; }
-
-    // particles
-    for(const p of state.particles){
-      p.t += dt;
-      p.x += p.vx * dt;
-      p.z += p.vz * dt;
-    }
-    state.particles = state.particles.filter(p => p.t < p.life);
-
-    // pickups
-    for(let i=state.items.length-1;i>=0;i--){
-      const it = state.items[i];
-      if(itemTest(it)){
-        state.items.splice(i,1);
-        player.dashCharge = Math.min(2, player.dashCharge + 1);
-        spawnPickupParticles(it.x);
-        beep("ok");
-        vibrate(12);
-      }
-    }
-
-    // collisions
-    if(player.invuln <= 0){
-      for(const m of state.mobs){
-        if(hitTest(m)){
-          state.hitFlash = 1;
-          state.shake = 10;
-          beep("hit");
-          vibrate(65);
-          spawnHitParticles();
-          gameOver();
-          break;
-        }
-      }
-    }
-
-    // cleanup
-    state.mobs = state.mobs.filter(m => m.z > -0.2);
-    state.items = state.items.filter(i => i.z > -0.2);
-    state.bgObjs = state.bgObjs.filter(b => b.z > -0.25);
+    state.enemies.push({
+      x, y:FLOOR_Y,
+      vx: speed * -side,
+      hp: 1 + (state.wave>=6 ? 1 : 0),
+      kind: (Math.random()<0.2 && state.wave>=4) ? "heavy" : "normal",
+      wob: rand(0,Math.PI*2),
+      hurt:0,
+      atkCD: rand(0.6, 1.2),
+    });
   }
 
-  // ---------- Draw (INK STYLE) ----------
+  // ---------- Drawing: ink-only scene ----------
   function draw(){
-    const sx = (Math.random()*2-1) * state.shake;
-    const sy = (Math.random()*2-1) * state.shake;
+    // camera shake
+    const sx = (Math.random()*2-1)*state.shake;
+    const sy = (Math.random()*2-1)*state.shake;
 
     ctx.save();
     ctx.translate(sx, sy);
 
-    // paper background
-    ctx.fillStyle = "#fbfbf8";
+    // paper base + texture
+    ctx.fillStyle = "#f1e8d2";
     ctx.fillRect(0,0,canvas.width,canvas.height);
-    // tile paper noise
     for(let y=0;y<canvas.height;y+=paper.height){
       for(let x=0;x<canvas.width;x+=paper.width){
         ctx.drawImage(paper, x, y);
       }
     }
 
-    drawInkSky();
-    drawInkFarSeoul();
-    drawInkSilhouettes();
-    drawInkGroundPlane();     // 광활지 느낌
-    drawItems();
-    drawMobs();
-    drawPlayer();
-    drawParticles();
-    drawHUD();
-    drawBanner();
+    // ink wash sky
+    const sky = ctx.createLinearGradient(0,0,0,280);
+    sky.addColorStop(0,"rgba(15,23,42,0.10)");
+    sky.addColorStop(1,"rgba(15,23,42,0.00)");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0,0,canvas.width,300);
 
-    if(state.hitFlash > 0){
-      ctx.fillStyle = `rgba(185,28,28,${0.16 * state.hitFlash})`;
+    // distant mountains (brush)
+    drawMountains();
+
+    // ground line
+    brushStroke([{x:40,y:FLOOR_Y+6},{x:920,y:FLOOR_Y+6}], 6, 0.20);
+
+    // drifting ink mist
+    drawMist();
+
+    // enemies
+    for(const e of state.enemies) drawEnemy(e);
+
+    // player
+    drawPlayer();
+
+    // slash effect
+    if(player.slashing){
+      drawSlashArc();
+    }
+
+    // HUD
+    drawHUD();
+
+    // flash veil on hit (ink veil)
+    if(state.flash>0){
+      ctx.fillStyle = `rgba(15,23,42,${0.18*state.flash})`;
       ctx.fillRect(0,0,canvas.width,canvas.height);
     }
 
     ctx.restore();
   }
 
-  function drawInkSky(){
-    // wash gradients (ink wash)
-    const g = ctx.createLinearGradient(0,0,0,320);
-    g.addColorStop(0,"rgba(148,163,184,0.18)");
-    g.addColorStop(1,"rgba(148,163,184,0.02)");
+  function drawMountains(){
+    const baseY = 280;
+    const t = state.t*0.18;
+    const pts1 = [];
+    for(let i=0;i<=20;i++){
+      const x = i*(canvas.width/20);
+      const y = baseY + Math.sin(i*0.7 + t)*18 + (i%3)*6;
+      pts1.push({x,y});
+    }
+    // stroke mountain ridge
+    brushStroke(pts1, 10, 0.10);
+    // fill mountain wash
+    ctx.save();
+    ctx.fillStyle = "rgba(15,23,42,0.05)";
+    ctx.beginPath();
+    ctx.moveTo(pts1[0].x, pts1[0].y);
+    for(const p of pts1) ctx.lineTo(p.x,p.y);
+    ctx.lineTo(canvas.width, baseY+120);
+    ctx.lineTo(0, baseY+120);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawMist(){
+    const y = 320 + Math.sin(state.t*0.6)*8;
+    const g = ctx.createLinearGradient(0,y-20,0,y+70);
+    g.addColorStop(0,"rgba(241,232,210,0)");
+    g.addColorStop(0.5,"rgba(241,232,210,0.75)");
+    g.addColorStop(1,"rgba(241,232,210,0)");
     ctx.fillStyle = g;
-    ctx.fillRect(0,0,canvas.width,320);
-
-    // mist band
-    const m = ctx.createLinearGradient(0,170,0,310);
-    m.addColorStop(0,"rgba(255,255,255,0.0)");
-    m.addColorStop(0.5,"rgba(255,255,255,0.55)");
-    m.addColorStop(1,"rgba(255,255,255,0.0)");
-    ctx.fillStyle = m;
-    ctx.fillRect(0,130,canvas.width,220);
-
-    // a few ink clouds
-    ctx.fillStyle = "rgba(30,41,59,0.06)";
-    inkCloud(160, 88, 1.2);
-    inkCloud(380, 72, 0.95);
-    inkCloud(760, 92, 1.1);
-
-    function inkCloud(x,y,s){
-      ctx.save();
-      ctx.translate(x,y);
-      ctx.scale(s,s);
-      ctx.beginPath();
-      ctx.arc(-28,0,18,0,Math.PI*2);
-      ctx.arc(-6,-10,22,0,Math.PI*2);
-      ctx.arc(18,0,16,0,Math.PI*2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-    }
+    ctx.fillRect(0,y-40,canvas.width,140);
   }
 
-  function drawInkFarSeoul(){
-    // distant skyline made of brush blocks
-    const baseY = 238;
-    for(let i=0;i<22;i++){
-      const x = i*52 + rand(-8,8);
-      const w = 40 + rand(-6,10);
-      const h = 24 + (i%5)*10 + rand(-6,12);
-      inkFillRect(x, baseY-h, w, h, 0.06);
-    }
+  function drawEnemy(e){
+    // ink silhouette monster
+    const x=e.x, y=e.y;
+    const bob = Math.sin(e.wob + state.t*8)*3;
 
-    // distant tower stroke
-    const pts = [
-      {x:720,y:baseY-110},
-      {x:726,y:baseY-12},
-    ];
-    inkStrokePath(pts, 8, 0.08);
-  }
+    // shadow
+    ctx.fillStyle = inkAlpha(0.10);
+    ctx.beginPath(); ctx.ellipse(x, y+6, 34, 10, 0, 0, Math.PI*2); ctx.fill();
 
-  function drawInkGroundPlane(){
-    // huge ground polygon with soft washes
-    const hY = WORLD.horizonY + 40;
-    const nY = WORLD.nearY;
-
-    // main plane
-    ctx.save();
-    ctx.fillStyle = "rgba(30,41,59,0.03)";
+    // body wash
+    ctx.fillStyle = inkAlpha(0.14 + (e.kind==="heavy"?0.04:0));
     ctx.beginPath();
-    ctx.moveTo(0, hY);
-    ctx.lineTo(canvas.width, hY);
-    ctx.lineTo(canvas.width, canvas.height);
-    ctx.lineTo(0, canvas.height);
-    ctx.closePath();
+    ctx.roundRect(x-18, y-78+bob, 36, 72, 14);
     ctx.fill();
-    ctx.restore();
 
-    // subtle “flow lines” to indicate forward motion (no lanes)
-    for(let i=0;i<9;i++){
-      const z = (i/9 + (state.t*state.speed*0.40)%1) % 1;
-      const y = lerp(nY, hY, z);
-      const a = lerp(0.06, 0.00, z);
-      ctx.fillStyle = `rgba(15,23,42,${a})`;
-      ctx.fillRect(0, y, canvas.width, 1);
-    }
-
-    // faint central path (not a road, just a worn field)
-    ctx.save();
-    const path = ctx.createLinearGradient(0, hY, 0, nY);
-    path.addColorStop(0,"rgba(15,23,42,0.00)");
-    path.addColorStop(1,"rgba(15,23,42,0.04)");
-    ctx.fillStyle = path;
+    // head wash
     ctx.beginPath();
-    ctx.moveTo(WORLD.cx - WORLD.widthFar*0.22, hY);
-    ctx.lineTo(WORLD.cx + WORLD.widthFar*0.22, hY);
-    ctx.lineTo(WORLD.cx + WORLD.widthNear*0.26, nY);
-    ctx.lineTo(WORLD.cx - WORLD.widthNear*0.26, nY);
-    ctx.closePath();
+    ctx.roundRect(x-16, y-112+bob, 32, 34, 14);
     ctx.fill();
-    ctx.restore();
-  }
-
-  function drawInkSilhouettes(){
-    const list = [...state.bgObjs].sort((a,b)=>b.z-a.z);
-    for(const o of list){
-      const z = clamp(o.z,0,1);
-      const p = project(o.xNorm, z);
-      const s = p.scale * 2.4;
-      const fade = clamp((1-z)*1.2, 0, 1);
-
-      ctx.save();
-      ctx.globalAlpha = fade*0.65;
-      ctx.translate(p.x, p.y);
-      ctx.scale(s, s);
-
-      // draw with strokes + washes
-      switch(o.kind){
-        case "hospital": drawSilHospital(); break;
-        case "gwang": drawSilGwang(); break;
-        case "hangang": drawSilBridge(); break;
-        case "namsan": drawSilTower(); break;
-        case "subway": drawSilSubway(); break;
-        case "palace": drawSilPalace(); break;
-        default: drawSilTower();
-      }
-
-      ctx.restore();
-      ctx.globalAlpha = 1;
-    }
-
-    function drawSilHospital(){
-      // wash
-      ctx.fillStyle="rgba(15,23,42,0.06)";
-      ctx.beginPath(); ctx.roundRect(-120,-90,240,130,18); ctx.fill();
-      // strokes
-      inkStrokePath([{x:-120,y:-90},{x:120,y:-90},{x:120,y:40},{x:-120,y:40},{x:-120,y:-90}], 5, 0.09);
-      inkStrokePath([{x:-30,y:-90},{x:-30,y:40}], 4, 0.08);
-      inkStrokePath([{x:30,y:-90},{x:30,y:40}], 4, 0.08);
-    }
-    function drawSilGwang(){
-      ctx.fillStyle="rgba(15,23,42,0.06)";
-      ctx.beginPath(); ctx.roundRect(-140,-60,280,90,16); ctx.fill();
-      inkStrokePath([{x:-150,y:-60},{x:0,y:-122},{x:150,y:-60}], 6, 0.10);
-      inkStrokePath([{x:-140,y:-60},{x:140,y:-60},{x:140,y:30},{x:-140,y:30},{x:-140,y:-60}], 5, 0.09);
-    }
-    function drawSilBridge(){
-      ctx.strokeStyle="rgba(15,23,42,0.10)";
-      ctx.lineWidth=8;
-      ctx.beginPath();
-      ctx.moveTo(-160,20);
-      ctx.quadraticCurveTo(0,-96,160,20);
-      ctx.stroke();
-      // deck
-      ctx.strokeStyle="rgba(15,23,42,0.08)";
-      ctx.lineWidth=10;
-      ctx.beginPath(); ctx.moveTo(-180,20); ctx.lineTo(180,20); ctx.stroke();
-    }
-    function drawSilTower(){
-      ctx.fillStyle="rgba(15,23,42,0.05)";
-      ctx.fillRect(-10,-160,20,220);
-      inkStrokePath([{x:0,y:-180},{x:0,y:60}], 7, 0.10);
-      ctx.fillStyle="rgba(15,23,42,0.06)";
-      ctx.beginPath(); ctx.roundRect(-60,-190,120,60,18); ctx.fill();
-      inkStrokePath([{x:-60,y:-190},{x:60,y:-190},{x:60,y:-130},{x:-60,y:-130},{x:-60,y:-190}], 5, 0.09);
-    }
-    function drawSilSubway(){
-      ctx.fillStyle="rgba(15,23,42,0.06)";
-      ctx.beginPath(); ctx.roundRect(-140,-90,280,170,30); ctx.fill();
-      inkStrokePath([{x:-140,y:-90},{x:140,y:-90},{x:140,y:80},{x:-140,y:80},{x:-140,y:-90}], 6, 0.10);
-    }
-    function drawSilPalace(){
-      ctx.fillStyle="rgba(15,23,42,0.06)";
-      ctx.fillRect(-170,10,340,26);
-      inkStrokePath([{x:-180,y:10},{x:0,y:-86},{x:180,y:10}], 6, 0.10);
-      inkStrokePath([{x:-170,y:10},{x:170,y:10},{x:170,y:36},{x:-170,y:36},{x:-170,y:10}], 5, 0.08);
-    }
-  }
-
-  function drawItems(){
-    const list = [...state.items].sort((a,b)=>b.z-a.z);
-    for(const it of list){
-      const p = project(it.x, clamp(it.z,0,1));
-      const s = p.scale * 1.05;
-      const bob = Math.sin(it.wob)*3;
-
-      ctx.save();
-      ctx.translate(p.x, p.y + bob);
-      ctx.scale(s, s);
-
-      // brushy glow
-      ctx.fillStyle = "rgba(37,99,235,0.14)";
-      ctx.beginPath(); ctx.ellipse(0, 18, 38, 12, 0, 0, Math.PI*2); ctx.fill();
-
-      // ink battery
-      ctx.fillStyle = "rgba(15,23,42,0.10)";
-      ctx.beginPath(); ctx.roundRect(-16, -30, 32, 42, 10); ctx.fill();
-      inkStrokePath([{x:-16,y:-30},{x:16,y:-30},{x:16,y:12},{x:-16,y:12},{x:-16,y:-30}], 3, 0.16);
-
-      ctx.fillStyle = "rgba(37,99,235,0.22)";
-      ctx.fillRect(-10,-22,20,28);
-
-      ctx.restore();
-    }
-  }
-
-  function drawMobs(){
-    const list = [...state.mobs].sort((a,b)=>b.z-a.z);
-    for(const m of list) drawZombie(m);
-  }
-
-  function drawZombie(m){
-    const p = project(m.x, clamp(m.z,0,1));
-    const s = p.scale * 1.20;
-    const bob = Math.sin(m.bob)*2;
-
-    ctx.save();
-    ctx.translate(p.x, p.y + bob);
-    ctx.scale(s, s);
-
-    // shadow wash
-    ctx.fillStyle = "rgba(15,23,42,0.10)";
-    ctx.beginPath(); ctx.ellipse(0, 22, 32, 10, 0, 0, Math.PI*2); ctx.fill();
-
-    // ink body (washed)
-    ctx.fillStyle = "rgba(34,197,94,0.16)";
-    ctx.beginPath(); ctx.roundRect(-22,-78,44,78,12); ctx.fill();
-    ctx.fillStyle = "rgba(34,197,94,0.18)";
-    ctx.beginPath(); ctx.roundRect(-20,-114,40,38,12); ctx.fill();
 
     // outline strokes
-    inkStrokePath([{x:-22,y:-78},{x:22,y:-78},{x:22,y:0},{x:-22,y:0},{x:-22,y:-78}], 3.2, 0.18);
-    inkStrokePath([{x:-20,y:-114},{x:20,y:-114},{x:20,y:-76},{x:-20,y:-76},{x:-20,y:-114}], 3.2, 0.18);
+    brushStroke([{x:x-18,y:y-78+bob},{x:x+18,y:y-78+bob},{x:x+18,y:y-6+bob},{x:x-18,y:y-6+bob},{x:x-18,y:y-78+bob}], 3.4, 0.22);
+    brushStroke([{x:x-16,y:y-112+bob},{x:x+16,y:y-112+bob},{x:x+16,y:y-78+bob},{x:x-16,y:y-78+bob},{x:x-16,y:y-112+bob}], 3.0, 0.20);
 
-    // eyes (ink dots)
-    ctx.fillStyle = "rgba(15,23,42,0.55)";
-    ctx.beginPath(); ctx.arc(-8,-96,3,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc( 8,-96,3,0,Math.PI*2); ctx.fill();
+    // horns (ink)
+    brushStroke([{x:x-10,y:y-114+bob},{x:x-26,y:y-132+bob}], 3.2, 0.20);
+    brushStroke([{x:x+10,y:y-114+bob},{x:x+26,y:y-132+bob}], 3.2, 0.20);
 
-    // mouth stroke
-    inkStrokePath([{x:-10,y:-84},{x:10,y:-84}], 3.4, 0.20);
+    // eyes
+    ctx.fillStyle = inkAlpha(0.55);
+    washCircle(x-6, y-96+bob, 2.6, 0.55);
+    washCircle(x+6, y-96+bob, 2.6, 0.55);
 
-    // accessories minimal
-    if(m.type.style==="hat"){
-      ctx.fillStyle="rgba(15,23,42,0.18)";
-      ctx.beginPath(); ctx.ellipse(0,-118,32,6,0,0,Math.PI*2); ctx.fill();
-      inkStrokePath([{x:-32,y:-118},{x:32,y:-118}], 3.2, 0.20);
-    } else if(m.type.style==="mask"){
-      ctx.fillStyle="rgba(15,23,42,0.08)";
-      ctx.beginPath(); ctx.roundRect(-18,-92,36,16,8); ctx.fill();
-      inkStrokePath([{x:-18,y:-92},{x:18,y:-92},{x:18,y:-76},{x:-18,y:-76},{x:-18,y:-92}], 2.6, 0.16);
+    // hurt blink
+    if(e.hurt>0){
+      ctx.fillStyle = inkAlpha(0.10*e.hurt);
+      ctx.fillRect(x-24,y-130,48,140);
     }
-
-    ctx.restore();
   }
 
   function drawPlayer(){
-    const p = project(player.x*0.90, 0.04);
-    const s = 1.12;
+    const x=player.x, y=player.y;
+    const bob = (player.y < FLOOR_Y-0.5) ? 0 : Math.sin(state.t*12)*(Math.abs(player.vx)>10 ? 1.5 : 0.6);
 
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.scale(s, s);
-
-    // roll dash rotation around center
-    if(player.dashing){
-      ctx.rotate(player.roll);
-    }
-
-    // invuln aura (ink-blue wash)
+    // invuln aura
     if(player.invuln>0){
-      ctx.fillStyle = `rgba(37,99,235,${0.10 + 0.12*Math.sin(state.t*24)})`;
-      ctx.beginPath(); ctx.ellipse(0, 12, 44, 20, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = inkAlpha(0.06 + 0.06*Math.sin(state.t*24));
+      ctx.beginPath(); ctx.ellipse(x, y-30, 54, 34, 0, 0, Math.PI*2); ctx.fill();
     }
 
     // shadow
-    ctx.fillStyle = "rgba(15,23,42,0.12)";
-    ctx.beginPath(); ctx.ellipse(0, 24, 34, 10, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = inkAlpha(0.10);
+    ctx.beginPath(); ctx.ellipse(x, y+8, 38, 12, 0, 0, Math.PI*2); ctx.fill();
 
-    // body wash
-    ctx.fillStyle = "rgba(15,23,42,0.10)";
-    ctx.beginPath(); ctx.roundRect(-18,-74,36,64,14); ctx.fill();
+    // robe/body wash
+    ctx.fillStyle = inkAlpha(0.12);
+    ctx.beginPath(); ctx.roundRect(x-18, y-74+bob, 36, 64, 14); ctx.fill();
+    brushStroke([{x:x-18,y:y-74+bob},{x:x+18,y:y-74+bob},{x:x+18,y:y-10+bob},{x:x-18,y:y-10+bob},{x:x-18,y:y-74+bob}], 3.4, 0.22);
 
-    // shirt wash
-    ctx.fillStyle = "rgba(255,255,255,0.55)";
-    ctx.beginPath(); ctx.roundRect(-16,-54,32,36,10); ctx.fill();
+    // head
+    ctx.fillStyle = inkAlpha(0.06);
+    ctx.beginPath(); ctx.roundRect(x-16, y-108+bob, 32, 36, 14); ctx.fill();
+    brushStroke([{x:x-16,y:y-108+bob},{x:x+16,y:y-108+bob},{x:x+16,y:y-72+bob},{x:x-16,y:y-72+bob},{x:x-16,y:y-108+bob}], 3.0, 0.18);
 
-    // head wash
-    ctx.fillStyle = "rgba(244,203,159,0.55)";
-    ctx.beginPath(); ctx.roundRect(-16,-108,32,36,14); ctx.fill();
-
-    // outlines (brush strokes)
-    inkStrokePath([{x:-18,y:-74},{x:18,y:-74},{x:18,y:-10},{x:-18,y:-10},{x:-18,y:-74}], 3.4, 0.22);
-    inkStrokePath([{x:-16,y:-108},{x:16,y:-108},{x:16,y:-72},{x:-16,y:-72},{x:-16,y:-108}], 3.0, 0.20);
-
-    // hair stroke
-    ctx.fillStyle = "rgba(15,23,42,0.18)";
-    ctx.beginPath(); ctx.roundRect(-16,-110,32,18,12); ctx.fill();
-    inkStrokePath([{x:-16,y:-110},{x:16,y:-110},{x:16,y:-92},{x:-16,y:-92},{x:-16,y:-110}], 2.8, 0.18);
+    // hair cap
+    ctx.fillStyle = inkAlpha(0.16);
+    ctx.beginPath(); ctx.roundRect(x-16, y-110+bob, 32, 18, 12); ctx.fill();
 
     // eyes
-    ctx.fillStyle="rgba(15,23,42,0.55)";
-    ctx.beginPath(); ctx.arc(-6,-94,2.2,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc( 6,-94,2.2,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = inkAlpha(0.55);
+    washCircle(x-6, y-94+bob, 2.2, 0.55);
+    washCircle(x+6, y-94+bob, 2.2, 0.55);
 
-    // legs
-    ctx.fillStyle="rgba(15,23,42,0.10)";
-    ctx.beginPath(); ctx.roundRect(-14,-10,12,28,8); ctx.fill();
-    ctx.beginPath(); ctx.roundRect( 2,-10,12,28,8); ctx.fill();
-    inkStrokePath([{x:-14,y:-10},{x:-2,y:-10},{x:-2,y:18},{x:-14,y:18},{x:-14,y:-10}], 2.6, 0.18);
-    inkStrokePath([{x:2,y:-10},{x:14,y:-10},{x:14,y:18},{x:2,y:18},{x:2,y:-10}], 2.6, 0.18);
-
-    ctx.restore();
+    // sword (in hand)
+    const sx = x + player.face*24;
+    const sy = y-52+bob;
+    brushStroke([{x:sx, y:sy},{x:sx+player.face*54, y:sy-14}], 4.2, 0.22); // blade
+    brushStroke([{x:sx, y:sy},{x:sx-player.face*10, y:sy+14}], 4.2, 0.18); // hilt
   }
 
-  function drawParticles(){
-    for(const p of state.particles){
-      const a = 1 - (p.t/p.life);
-      const pr = project(p.x, clamp(p.z,0,1));
-      ctx.save();
-      ctx.globalAlpha = a * 0.6;
-      ctx.fillStyle = "rgba(15,23,42,0.20)";
-      ctx.beginPath();
-      ctx.arc(pr.x, pr.y, 4 + (1-a)*4, 0, Math.PI*2);
-      ctx.fill();
-      ctx.restore();
-      ctx.globalAlpha = 1;
+  function drawSlashArc(){
+    const hb = slashHitbox();
+    const t = player.slashT / player.slashDur;
+    const a = clamp(1 - t, 0, 1);
+
+    // arc curve points
+    const pts = [];
+    const start = (player.face>0) ? -0.9 : 2.2;
+    const end   = (player.face>0) ? 0.8  : 4.0;
+    const steps = 10;
+    for(let i=0;i<=steps;i++){
+      const u = i/steps;
+      const ang = lerp(start, end, u);
+      pts.push({ x: hb.x + Math.cos(ang)*hb.r, y: hb.y + Math.sin(ang)*hb.r*0.55 });
     }
+    brushStroke(pts, 10, 0.18*a);
+    splatter(hb.x + player.face*40, hb.y+10, 0.55*a);
   }
 
   function drawHUD(){
     ctx.save();
-    ctx.fillStyle = "rgba(15,23,42,0.85)";
+    ctx.fillStyle = inkAlpha(0.85);
     ctx.font = "900 18px system-ui,-apple-system,'Noto Sans KR',Arial";
-    ctx.fillText(`SCORE ${Math.floor(state.score)}`, 18, 30);
+    ctx.fillText(`점수 ${Math.floor(state.score)}`, 18, 30);
 
-    ctx.fillStyle = "rgba(15,23,42,0.55)";
+    ctx.fillStyle = inkAlpha(0.55);
     ctx.font = "900 13px system-ui,-apple-system,'Noto Sans KR',Arial";
-    ctx.fillText(`HI ${state.hi}`, 18, 52);
+    ctx.fillText(`최고 ${state.hi}`, 18, 52);
 
-    ctx.fillStyle = "rgba(15,23,42,0.85)";
+    ctx.fillStyle = inkAlpha(0.70);
     ctx.font = "900 13px system-ui,-apple-system,'Noto Sans KR',Arial";
-    ctx.fillText(`DASH ${player.dashCharge}/2`, 18, 74);
+    ctx.fillText(`HP ${player.hp}/3`, 18, 74);
 
-    const c = CHAPTERS[state.chapterIndex];
-    ctx.fillStyle = "rgba(15,23,42,0.45)";
+    ctx.fillStyle = inkAlpha(0.55);
     ctx.font = "900 12px system-ui,-apple-system,'Noto Sans KR',Arial";
-    ctx.fillText(`${c.name} · 난이도 ${Math.floor(state.danger*100)}%`, 18, 94);
+    ctx.fillText(`WAVE ${state.wave}  ·  COMBO ${state.combo}`, 18, 94);
+
+    // small calligraphy seal-like stamp
+    ctx.fillStyle = "rgba(15,23,42,0.12)";
+    ctx.beginPath(); ctx.roundRect(canvas.width-108, 16, 92, 34, 10); ctx.fill();
+    brushStroke([{x:canvas.width-104,y:20},{x:canvas.width-20,y:20},{x:canvas.width-20,y:46},{x:canvas.width-104,y:46},{x:canvas.width-104,y:20}], 2.6, 0.22);
+    ctx.fillStyle = inkAlpha(0.80);
+    ctx.font = "900 12px system-ui";
+    ctx.fillText("墨劍", canvas.width-78, 38);
 
     ctx.restore();
   }
 
-  function drawBanner(){
-    if(state.banner <= 0) return;
-    const a = smooth01(clamp(state.banner,0,1));
-    ctx.save();
-    ctx.globalAlpha = a;
+  // ---------- Update ----------
+  function update(dt){
+    state.t += dt;
 
-    // ink wash label
-    ctx.fillStyle = "rgba(255,255,255,0.78)";
-    ctx.beginPath();
-    ctx.roundRect(canvas.width/2-170, 84, 340, 56, 18);
-    ctx.fill();
+    state.flash = Math.max(0, state.flash - dt*2.8);
+    state.shake = Math.max(0, state.shake - dt*18);
 
-    inkStrokePath([
-      {x:canvas.width/2-170,y:84},{x:canvas.width/2+170,y:84},
-      {x:canvas.width/2+170,y:140},{x:canvas.width/2-170,y:140},
-      {x:canvas.width/2-170,y:84}
-    ], 3, 0.18);
+    if(!state.running){
+      // consume one-shot presses
+      input.jumpPressed=false;
+      input.slashPressed=false;
+      input.rollPressed=false;
+      return;
+    }
 
-    ctx.fillStyle = "rgba(15,23,42,0.85)";
-    ctx.font = "900 18px system-ui,-apple-system,'Noto Sans KR',Arial";
-    const t = state.bannerText;
-    ctx.fillText(t, canvas.width/2 - ctx.measureText(t).width/2, 118);
+    // difficulty & waves
+    state.score += dt * (120 + state.wave*8);
+    state.danger = clamp(state.score/1400, 0, 1);
 
-    ctx.restore();
+    // wave rises by score
+    const targetWave = 1 + Math.floor(state.score / 600);
+    if(targetWave > state.wave){
+      state.wave = targetWave;
+      splatter(480, 200, 1.2);
+    }
+
+    // spawn
+    state.spawnEvery = lerp(1.25, 0.55, clamp((state.wave-1)/10, 0, 1));
+    state.spawnTimer += dt;
+    if(state.spawnTimer >= state.spawnEvery){
+      state.spawnTimer = 0;
+      spawnEnemy();
+      if(state.wave>=5 && Math.random()<0.25) spawnEnemy();
+    }
+
+    // movement target (keyboard)
+    if(input.left)  player.targetX -= 520*dt;
+    if(input.right) player.targetX += 520*dt;
+    player.targetX = clamp(player.targetX, WORLD_L, WORLD_R);
+
+    // smooth follow (spring)
+    const k = 26, c = 2*Math.sqrt(k);
+    const ax = k*(player.targetX - player.x) - c*player.vx;
+    player.vx += ax*dt;
+
+    // if rolling, add slide impulse, but clamp
+    if(player.rolling){
+      // keep momentum
+      player.vx *= 0.98;
+    } else {
+      // natural damping
+      player.vx *= Math.pow(0.001, dt);
+    }
+
+    player.x += player.vx*dt;
+    player.x = clamp(player.x, WORLD_L, WORLD_R);
+
+    // jump
+    if(input.jumpPressed){ tryJump(); input.jumpPressed=false; }
+
+    // gravity
+    player.vy += G*dt;
+    player.y += player.vy*dt;
+    if(player.y >= FLOOR_Y){
+      player.y = FLOOR_Y;
+      player.vy = 0;
+    }
+
+    // cooldowns
+    player.slashCD = Math.max(0, player.slashCD - dt);
+    player.rollCD  = Math.max(0, player.rollCD - dt);
+    player.invuln  = Math.max(0, player.invuln - dt);
+
+    // actions
+    if(input.rollPressed){ tryRoll(); input.rollPressed=false; }
+    if(input.slashPressed){ trySlash(); input.slashPressed=false; }
+
+    // slash update + hit
+    if(player.slashing){
+      player.slashT += dt;
+      const hb = slashHitbox();
+      // damage window: mid swing
+      const t = player.slashT / player.slashDur;
+      const dmgOn = (t > 0.18 && t < 0.72);
+
+      if(dmgOn){
+        for(let i=state.enemies.length-1;i>=0;i--){
+          const e = state.enemies[i];
+          const dx = e.x - hb.x;
+          const dy = (e.y-80) - hb.y;
+          const dist = Math.hypot(dx,dy);
+
+          if(dist < hb.r*0.70){
+            // hit
+            e.hp -= 1;
+            e.hurt = 1;
+            state.shake = Math.max(state.shake, 6);
+            splatter(e.x, e.y-70, 1.0);
+            beep("slash");
+            vibrate(12);
+
+            if(e.hp <= 0){
+              state.enemies.splice(i,1);
+              state.score += 120 + state.wave*18;
+              // combo
+              state.combo += 1;
+              state.comboT = 1.2;
+            }
+          }
+        }
+      }
+
+      if(player.slashT >= player.slashDur){
+        player.slashing=false;
+        player.slashT=0;
+      }
+    }
+
+    // roll update
+    if(player.rolling){
+      player.rollT += dt;
+      if(player.rollT >= player.rollDur){
+        player.rolling=false;
+        player.rollT=0;
+      } else {
+        // during roll, invuln refresh lightly
+        player.invuln = Math.max(player.invuln, 0.18);
+      }
+    }
+
+    // combo decay
+    if(state.comboT > 0){
+      state.comboT -= dt;
+      if(state.comboT <= 0){
+        state.comboT = 0;
+        state.combo = 0;
+      }
+    }
+
+    // enemies update + attack collision
+    for(const e of state.enemies){
+      e.wob += dt*6;
+      e.hurt = Math.max(0, e.hurt - dt*4);
+
+      // steer toward player
+      const dir = Math.sign(player.x - e.x) || 1;
+      const base = (e.kind==="heavy"?120:160) * (1 + state.wave*0.06);
+      e.vx = lerp(e.vx, dir*base, 1 - Math.pow(0.001, dt));
+      e.x += e.vx*dt;
+
+      // attack if close
+      e.atkCD -= dt;
+      const close = Math.abs(e.x - player.x) < 46 && Math.abs(player.y - FLOOR_Y) < 2;
+      if(close && e.atkCD <= 0){
+        e.atkCD = (e.kind==="heavy"?1.05:0.8) - state.wave*0.02;
+        e.atkCD = Math.max(0.35, e.atkCD);
+        damagePlayer();
+      }
+    }
+
+    // cleanup (keep inside bounds)
+    state.enemies = state.enemies.filter(e => e.x > WORLD_L-120 && e.x < WORLD_R+120);
+
+    // ink veil fades
+    if(player.invuln>0 && Math.random() < dt*4){
+      // small mist splashes around player during invuln
+      washCircle(player.x + rand(-30,30), player.y-50 + rand(-20,20), rand(6,14), 0.03);
+    }
   }
 
-  // ---------- Loop ----------
+  // ---------- Main loop ----------
   function loop(ts){
     if(!state.last) state.last = ts;
     const dt = clamp((ts - state.last)/1000, 0, 0.033);
@@ -1068,15 +820,14 @@
     requestAnimationFrame(loop);
   }
 
-  // ---------- Boot ----------
+  // ---------- Start ----------
   reset();
   requestAnimationFrame(loop);
 
-  // ---------- Actions that need audio gesture ----------
-  // dash should also start audio on first gesture if not started yet
+  // unlock audio on first gesture
   document.addEventListener("pointerdown", ()=>{
     if(!audioCtx){
-      try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch{}
+      try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch{}
     }
   }, {once:true});
 })();
