@@ -4,15 +4,15 @@
 
   // ---------- CANVAS RESIZE FIX ----------
 function resizeCanvas(){
-  const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
 
-  // 실제 픽셀 해상도 설정
-  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+  canvas.width  = Math.max(1, Math.floor(rect.width  * dpr));
   canvas.height = Math.max(1, Math.floor(rect.height * dpr));
 
-  // 논리 좌표계 복구
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // 좌표계는 CSS 픽셀 기준으로 맞춤
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
 }
 
 window.addEventListener("resize", resizeCanvas);
@@ -513,6 +513,23 @@ resizeCanvas();
 
     updateHUD();
   }
+
+  // ---------- TEMP DRAW (DEBUG) ----------
+function draw(){
+  // camera 없이 그냥 플레이어 점만 찍기
+  ctx.fillStyle = "black";
+  ctx.beginPath();
+  ctx.arc(player.x - cam.x, player.y - cam.y, 12, 0, Math.PI*2);
+  ctx.fill();
+
+  // 적들도 점으로
+  ctx.fillStyle = "red";
+  for(const e of state.enemies){
+    ctx.beginPath();
+    ctx.arc(e.x - cam.x, e.y - cam.y, 10, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
 
   // ---------- Main loop ----------
   function loop(ts){
