@@ -28,6 +28,16 @@
   const randi = (a,b)=>Math.floor(rand(a,b+1));
   const hypot = Math.hypot;
 
+    function spawnAfterimage(){
+    state.after.push({
+      x: player.x, y: player.y,
+      fx: player.face.x, fy: player.face.y,
+      t: 0, life: 0.22,
+      guard: player.guarding,
+      slash: player.slashing
+    });
+  }
+
   // ---------- Storage ----------
   const HI_KEY = "ink_blade_hi_v2";
   const loadHi = () => Number(localStorage.getItem(HI_KEY) || "0");
@@ -103,6 +113,33 @@
   // ---------- World / Camera (BIG MAP, portrait scroll) ----------
   const WORLD = { w: 2600, h: 5200 }; // “아주 넓게”
   const cam = { x: 0, y: 0, shake: 0 };
+
+    // ---------- JUICE (Hitstop / Slowmo / Camera punch) ----------
+  const juice = {
+    hitStop: 0,          // seconds
+    timeScale: 1,        // current scale
+    targetScale: 1,      // target
+    scaleT: 0,           // lerp timer
+    punchX: 0, punchY: 0,
+    punchVX: 0, punchVY: 0,
+    lookX: 0, lookY: 0,  // camera look-ahead
+  };
+
+  function addHitStop(sec){
+    juice.hitStop = Math.max(juice.hitStop, sec);
+  }
+  function addSlowmo(scale, sec){
+    // ex) addSlowmo(0.7, 0.22)
+    juice.targetScale = Math.min(juice.targetScale, scale);
+    juice.scaleT = Math.max(juice.scaleT, sec);
+  }
+  function addPunch(dx, dy, strength){
+    // direction punch
+    const s = strength || 1;
+    juice.punchVX += dx * 120 * s;
+    juice.punchVY += dy * 120 * s;
+  }
+
 
   // ---------- Input ----------
   const input = {
@@ -409,6 +446,9 @@
         cam.shake = Math.max(cam.shake, 12);
         splatter(player.x, player.y, 1.2);
         state.fx.push({ kind:"kanji", x:player.x, y:player.y-60, t:0, life:0.35, text:"破" });
+        addHitStop(0.08);
+        addSlowmo(0.78, 0.16);
+        addPunch(-player.face.x||0, -player.face.y||1, 1.4);
         return "parry";
       }
       player.hp -= dmg * 0.18;
@@ -426,6 +466,9 @@
     cam.shake = Math.max(cam.shake, 14);
     splatter(player.x, player.y, 1.2);
     state.flash = 1;
+    addHitStop(0.08);
+    addSlowmo(0.78, 0.16);
+    addPunch(-player.face.x||0, -player.face.y||1, 1.4);
 
     if(player.hp <= 0){
       player.hp = 0;
@@ -455,6 +498,22 @@
 
   // ---------- Drawing: world ----------
   function draw(){
+    // camera look-ahead (towards facing direction)
+    const lookAmt = 120; // feel free: 80~160
+    juice.lookX = lerp(juice.lookX, (player.face.x||0) * lookAmt, 1 - Math.pow(0.001, state.dt||0.016));
+    juice.lookY = lerp(juice.lookY, (player.face.y||-1) * (lookAmt*0.75), 1 - Math.pow(0.001, state.dt||0.016));
+
+    // camera punch spring (screen-space)
+    const spring = 70;
+    const damp = 14;
+    juice.punchVX += (-juice.punchX * spring - juice.punchVX * damp) * (state.dt||0.016);
+    juice.punchVY += (-juice.punchY * spring - juice.punchVY * damp) * (state.dt||0.016);
+    juice.punchX += juice.punchVX * (state.dt||0.016);
+    juice.punchY += juice.punchVY * (state.dt||0.016);
+
+    const targetCamX = clamp((player.x + juice.lookX) - canvas.width/2, 0, WORLD.w - canvas.width);
+    const targetCamY = clamp((player.y + juice.lookY) - canvas.height*0.62, 0, WORLD.h - canvas.height);
+    
     // camera follow
     const targetCamX = clamp(player.x - canvas.width/2, 0, WORLD.w - canvas.width);
     const targetCamY = clamp(player.y - canvas.height*0.62, 0, WORLD.h - canvas.height);
@@ -467,7 +526,7 @@
     cam.shake = Math.max(0, cam.shake - state.dt*30);
 
     ctx.save();
-    ctx.translate(-cam.x + sx, -cam.y + sy);
+    ctx.translate(-cam.x + sx + juice.punchX, -cam.y + sy + juice.punchY);
 
     // paper tile
     for(let yy = Math.floor(cam.y/512)*512; yy < cam.y + canvas.height + 512; yy+=512){
@@ -484,6 +543,17 @@
 
     // enemies
     for(const e of state.enemies) drawEnemy(e);
+
+    // afterimages behind player
+    for(const a of state.after){
+      const k = a.t / a.life;
+      const alpha = clamp(1 - k, 0, 1) * 0.10;
+      ctx.fillStyle = INK(alpha);
+      ctx.beginPath(); roundRect(a.x-18, a.y-86, 36, 72, 14); ctx.fill();
+      ctx.beginPath(); roundRect(a.x-16, a.y-124, 32, 36, 14); ctx.fill();
+      // sword faint
+      brushStroke([{x:a.x + a.fx*18, y:a.y-64 + a.fy*6}, {x:a.x + a.fx*88, y:a.y-64 + a.fy*76}], 7, alpha);
+    }
 
     // player
     drawPlayer();
@@ -570,6 +640,15 @@
   function drawPlayer(){
     // player silhouette + sword (black only), strong brush lines
     const x=player.x, y=player.y;
+    const spdNow = Math.hypot(player.vx, player.vy);
+    const lean = clamp(spdNow / 900, 0, 1) * 0.18; // radians
+    const ang = Math.atan2(player.vy, player.vx);
+    ctx.save();
+    ctx.translate(x, y-60);
+    ctx.rotate(isFinite(ang) ? ang * 0.15 : 0);
+    ctx.rotate(lean * (player.dashing ? 1.4 : 1.0));
+    ctx.translate(-x, -(y-60));
+    ctx.restore();
 
     // aura when guarding/parry
     if(player.guarding){
@@ -767,6 +846,7 @@
     // stick adds
     mx += input.stickVec.x;
     my += input.stickVec.y;
+    after: [],
 
     // normalize
     const mm = Math.hypot(mx,my);
@@ -803,6 +883,9 @@
         player.vx *= 0.25; player.vy *= 0.25;
       } else {
         player.invuln = Math.max(player.invuln, 0.12);
+      }
+      if(Math.random() < dt * 22){
+        spawnAfterimage();
       }
     }
 
@@ -842,6 +925,11 @@
             splatter(e.x, e.y, 0.9);
             cam.shake = Math.max(cam.shake, 10);
             player.sp = clamp(player.sp + 10, 0, player.spMax);
+
+             // JUICE: hit confirm
+            addHitStop(0.055);
+            addSlowmo(0.86, 0.10);
+            addPunch(player.face.x||0, player.face.y||-1, 1.0);
           }
         }
       }
@@ -935,6 +1023,8 @@
       // SP reward
       player.sp = clamp(player.sp + 18, 0, player.spMax);
     }
+        for(const a of state.after) a.t += dt;
+    state.after = state.after.filter(a => a.t < a.life);
 
     // FX update
     for(const f of state.fx){
@@ -955,7 +1045,26 @@
   // ---------- Main loop ----------
   function loop(ts){
     if(!state.last) state.last = ts;
-    const dt = clamp((ts - state.last)/1000, 0, 0.033);
+        const rawDt = clamp((ts - state.last)/1000, 0, 0.033);
+    state.last = ts;
+
+    // hitstop: time freezes but we still decay hitstop using rawDt
+    if(juice.hitStop > 0){
+      juice.hitStop = Math.max(0, juice.hitStop - rawDt);
+      // still draw (freeze update)
+      // dt = 0
+      update(0);
+    } else {
+      // slowmo scale settle
+      if(juice.scaleT > 0){
+        juice.scaleT = Math.max(0, juice.scaleT - rawDt);
+      } else {
+        juice.targetScale = 1;
+      }
+      // smooth timescale
+      juice.timeScale = lerp(juice.timeScale, juice.targetScale, 1 - Math.pow(0.001, rawDt));
+      update(rawDt * juice.timeScale);
+    }
     state.last = ts;
 
     update(dt);
