@@ -518,6 +518,8 @@
 
     ctx.fillStyle = PAPER;
     ctx.fillRect(0,0,canvas.width,canvas.height);
+    // draw world
+    draw();
 
     requestAnimationFrame(loop);
   }
