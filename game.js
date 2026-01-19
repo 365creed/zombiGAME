@@ -499,30 +499,32 @@
 
   // ---------- Main loop ----------
   function loop(ts){
-    if(!state.last) state.last = ts;
-    const rawDt = clamp((ts - state.last)/1000, 0, 0.033);
-    state.last = ts;
+  if(!state.last) state.last = ts;
+  const rawDt = clamp((ts - state.last)/1000, 0, 0.033);
+  state.last = ts;
 
-    if(juice.hitStop > 0){
-      juice.hitStop = Math.max(0, juice.hitStop - rawDt);
-      update(0);
+  if(juice.hitStop > 0){
+    juice.hitStop = Math.max(0, juice.hitStop - rawDt);
+    update(0);
+  } else {
+    if(juice.scaleT > 0){
+      juice.scaleT = Math.max(0, juice.scaleT - rawDt);
     } else {
-      if(juice.scaleT > 0){
-        juice.scaleT = Math.max(0, juice.scaleT - rawDt);
-      } else {
-        juice.targetScale = 1;
-      }
-      juice.timeScale = lerp(juice.timeScale, juice.targetScale, 1 - Math.pow(0.001, rawDt));
-      update(rawDt * juice.timeScale);
+      juice.targetScale = 1;
     }
-
-    ctx.fillStyle = PAPER;
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    // draw world
-    draw();
-
-    requestAnimationFrame(loop);
+    juice.timeScale = lerp(juice.timeScale, juice.targetScale, 1 - Math.pow(0.001, rawDt));
+    update(rawDt * juice.timeScale);
   }
+
+  // Clear screen (paper base)
+  ctx.fillStyle = PAPER;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // 🔴 이 줄이 빠져 있어서 화면이 텅 비어 있었음
+  draw();
+
+  requestAnimationFrame(loop);
+}
 
   reset();
   hiText.textContent = state.hi;
