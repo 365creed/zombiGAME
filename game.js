@@ -1,3 +1,7 @@
+// 모바일 스크롤/줌이 터치 입력을 먹는 문제 차단
+document.addEventListener("touchmove", (e)=>e.preventDefault(), { passive:false });
+document.addEventListener("touchstart", (e)=>{ /* no-op */ }, { passive:false });
+
 (() => {
   "use strict";
 
