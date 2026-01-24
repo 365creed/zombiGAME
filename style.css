@@ -289,6 +289,11 @@ body{
   transform: translateY(1px) scale(.99);
   filter: brightness(.96);
 }
+.abtn.is-down{
+  transform: translateY(1px) scale(.99);
+  filter: brightness(.92);
+  box-shadow: 0 6px 16px rgba(0,0,0,.22);
+}
 
 @media (max-width: 560px){
   .brand{min-width:120px;}
