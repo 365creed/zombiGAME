@@ -814,4 +814,63 @@
       ctx.strokeStyle = "#060606";
       ctx.lineWidth = s.w;
       ctx.lineCap = "round";
-      ctx
+      ctx.beginPath();
+      ctx.arc(0, 0, s.r, -0.6, 0.6);
+      ctx.stroke();
+
+      // highlight scratch
+      ctx.globalAlpha = 0.2 * t;
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, s.r - 10, -0.55, 0.55);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // particles
+    for (const p of particles) {
+      const [x, y] = worldToScreen(p.x, p.y, camX, camY);
+      const a = clamp(p.t / p.life, 0, 1);
+      ctx.globalAlpha = 0.55 * a;
+      ctx.fillStyle = "#0a0a0a";
+      ctx.beginPath();
+      ctx.arc(x, y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    // vignette
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, vw, 18);
+    ctx.fillRect(0, vh - 18, vw, 18);
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- Loop ----------
+  function loop(ts) {
+    const t = ts / 1000;
+    let dt = Math.min(0.033, t - (state.last / 1000 || t));
+    state.last = ts;
+    state.dt = dt;
+
+    if (state.running) update(dt);
+    draw();
+
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- Boot ----------
+  resetGame(true);
+  requestAnimationFrame(loop);
+
+  // overlay initial text
+  document.getElementById("ovTitle").textContent = "INK SWORD";
+  document.getElementById("ovBody").innerHTML =
+    `<b>이동</b> WASD/방향키 · <b>베기</b> J · <b>가드</b> K(누름) · <b>대시</b> L · <b>잉크 폭발</b> I<br/>
+     모바일: 왼쪽 조이스틱 이동 · 오른쪽 버튼(베기/가드/대시/폭발)`;
+
+})();
