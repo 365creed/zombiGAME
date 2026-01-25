@@ -1,10 +1,12 @@
-/* game.js — v5.1 FULL REPLACE
-   FIX: slashHoldT scope bug removed, no requestAnimationFrame override.
+/* game.js — v5.2 FULL REPLACE
+   FIX:
+   - Missing functions/blocks restored (pickPlayerSprite/pickEnemySprite/enemy sprites)
+   - Sprite width normalization (pads lines to same width) to prevent silent corruption
    FEATURES:
-   - Player: HUMAN pixel sprite, Walk 4f / Slash 4f (big sword travel) / Guard 2f
-   - Enemies: 2-frame breathing animation
-   - Guard: shield cone + parry flash window (on press)
-   - Heavy feel: hitstop, shake, visible cone, brush flash
+   - Human-ish pixel player (cloak/arms/legs), Walk 4f / Slash 4f / Guard 2f
+   - Enemies 2-frame breathing
+   - Guard shield cone + parry flash window
+   - Heavy feel: hitstop, shake, brush flash + visible cone
 */
 (() => {
   const canvas = document.getElementById("c");
@@ -100,7 +102,6 @@
     facing: 1,
 
     guarding: false,
-    guardHeld: false,
     parryT: 0,
     parryFlash: 0,
 
@@ -124,7 +125,6 @@
     special: false,
   };
 
-  // ✅ FIX: declare here (used in update)
   let slashHoldT = 0;
 
   const enemies = [];
@@ -210,7 +210,6 @@
     player.slashCD = 0;
     player.invuln = 0;
 
-    player.guardHeld = false;
     player.parryT = 0;
     player.parryFlash = 0;
 
@@ -328,7 +327,6 @@
     player.vx += nx * (heavy ? 185 : 95);
     player.vy += ny * (heavy ? 185 : 95);
 
-    // iterate backwards (safe for splice)
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
       if (!inCone(player.x, player.y, fx, fy, e.x, e.y, reach + e.r, half)) continue;
@@ -409,15 +407,12 @@
     const dy = e.y - player.y;
     const [nx, ny] = norm(dx, dy);
 
-    // knockback + stun
     e.x += nx * 26;
     e.y += ny * 26;
     e.stun = Math.max(e.stun, 0.24);
 
-    // parry damage (heavy)
     dealDamageIndex(enemyIndex, 22, e.x, e.y, true);
 
-    // reward
     player.ink = clamp(player.ink + 18, 0, player.inkMax);
 
     burstDots(player.x + nx * 22, player.y + ny * 22, 1.2);
@@ -505,7 +500,6 @@
     btn.addEventListener("pointercancel", () => { btn.classList.remove("is-down"); fn(true); }, { passive: true });
   }
 
-  // SLASH: hold -> heavy
   btnDown(btnSlash, () => { slashHoldT = 0.0001; });
   btnUp(btnSlash, () => {
     const heavy = slashHoldT >= 0.28;
@@ -513,26 +507,29 @@
     slashAttack(heavy);
   });
 
-  // GUARD: press -> parry window
   btnDown(btnGuard, () => {
     if (!input.guard) startParryWindow();
     input.guard = true;
   });
   btnUp(btnGuard, () => { input.guard = false; });
 
-  // DASH
   btnDown(btnDash, () => { input.dash = true; });
   btnUp(btnDash, () => {});
 
-  // SPECIAL
   btnDown(btnSpecial, () => { input.special = true; });
   btnUp(btnSpecial, () => {});
 
   /* =========================
-     Sprite System
+     Sprite System (robust)
   ========================= */
+  function normalizeLines(lines) {
+    let w = 0;
+    for (const s of lines) w = Math.max(w, s.length);
+    return lines.map(s => s.padEnd(w, " "));
+  }
   function spriteFromStrings(lines) {
-    return { w: lines[0].length, h: lines.length, lines };
+    const L = normalizeLines(lines);
+    return { w: L[0].length, h: L.length, lines: L };
   }
   function drawSprite(ctx2, spr, x, y, px, alpha = 1, mirrorX = false) {
     const w = spr.w, h = spr.h;
@@ -563,106 +560,220 @@
     ctx2.globalAlpha = 1;
   }
 
- /* =========================
-   PLAYER (HUMAN) — REPLACE THIS WHOLE BLOCK
-   더 “사람”으로 읽히는 도트: 머리/머리카락/얼굴/도포/팔/다리/칼
-========================= */
+  /* =========================
+     PLAYER (human-ish)
+  ========================= */
+  const P_IDLE = spriteFromStrings([
+    "        ..++++..        ",
+    "      ..++####++..      ",
+    "     .++########++.     ",
+    "     ++##++..++##++     ",
+    "    .+##+..++++..+#+.   ",
+    "    .+##+..+..+..+#+.   ",
+    "     ++##++....++##++   ",
+    "      .++########++.    ",
+    "        ..++##++..      ",
+    "         .++##++.       ",
+    "        .++####++.      ",
+    "      ..++######++..    ",
+    "     .++###++++###++.   ",
+    "     ++###+....+###++   ",
+    "     ++##+  ++  +##++   ",
+    "     ++##+  ++  +##++   ",
+    "     ++##+  ++  +##++   ",
+    "     ++##++....++##++   ",
+    "     .++###++++###++.   ",
+    "      .++########++.    ",
+    "        ..++##++..      ",
+    "        .++####++.      ",
+    "       .++######++.     ",
+    "      .++##++++##++.    ",
+    "      ++##+    +##++    ",
+    "      ++##+    +##++    ",
+    "      ++##+    +##++    ",
+    "      ++##+    +##++    ",
+    "      .++..    ..++.    ",
+    "       ..++.. ..++..    ",
+    "         ..++++..       ",
+    "           ....         ",
+  ]);
 
-// 24x32 (모든 줄 길이 24 유지!)
-const P_IDLE = spriteFromStrings([
-  "        ..++++..        ",
-  "      ..++####++..      ",
-  "     .++########++.     ",
-  "     ++##++..++##++     ",
-  "    .+##+..++++..+#+.   ",
-  "    .+##+..+..+..+#+.   ",
-  "     ++##++....++##++   ",
-  "      .++########++.    ",
-  "        ..++##++..      ",
-  "         .++##++.       ",
-  "        .++####++.      ",
-  "      ..++######++..    ",
-  "     .++###++++###++.   ",
-  "     ++###+....+###++   ",
-  "     ++##+  ++  +##++   ",
-  "     ++##+  ++  +##++   ",
-  "     ++##+  ++  +##++   ",
-  "     ++##++....++##++   ",
-  "     .++###++++###++.   ",
-  "      .++########++.    ",
-  "        ..++##++..      ",
-  "        .++####++.      ",
-  "       .++######++.     ",
-  "      .++##++++##++.    ",
-  "      ++##+    +##++    ",
-  "      ++##+    +##++    ",
-  "      ++##+    +##++    ",
-  "      ++##+    +##++    ",
-  "      .++..    ..++.    ",
-  "       ..++.. ..++..    ",
-  "         ..++++..       ",
-  "           ....         ",
-]);
+  function repl(lines, map) {
+    const out = lines.slice();
+    for (const m of map) out[m.i] = out[m.i].replace(m.from, m.to);
+    return out;
+  }
 
-// WALK 4f (다리 교차 + 도포 살짝 흔들림)
-function repl(lines, map) {
-  const out = lines.slice();
-  for (const m of map) out[m.i] = out[m.i].replace(m.from, m.to);
-  return out;
-}
+  const P_WALK1 = spriteFromStrings(repl(P_IDLE.lines, [
+    { i: 24, from: "++##+    +##++", to: "++##+  ++ +##++" },
+    { i: 25, from: "++##+    +##++", to: "++##+ ++  +##++" },
+    { i: 28, from: ".++..    ..++.", to: ".++..  .. ..++." },
+  ]));
+  const P_WALK2 = spriteFromStrings(repl(P_IDLE.lines, [
+    { i: 24, from: "++##+    +##++", to: "++##+ ++  +##++" },
+    { i: 25, from: "++##+    +##++", to: "++##+++   +##++" },
+    { i: 28, from: ".++..    ..++.", to: ".++.. ..  ..++." },
+  ]));
+  const P_WALK3 = spriteFromStrings(repl(P_IDLE.lines, [
+    { i: 24, from: "++##+    +##++", to: "++##+   ++##++" },
+    { i: 25, from: "++##+    +##++", to: "++##+  ++ +##++" },
+    { i: 28, from: ".++..    ..++.", to: ".++..  .. ..++." },
+  ]));
+  const P_WALK4 = spriteFromStrings(repl(P_IDLE.lines, [
+    { i: 24, from: "++##+    +##++", to: "++##+  ++ +##++" },
+    { i: 25, from: "++##+    +##++", to: "++##+   ++##++" },
+    { i: 28, from: ".++..    ..++.", to: ".++.. ..  ..++." },
+  ]));
 
-const P_WALK1 = spriteFromStrings(repl(P_IDLE.lines, [
-  { i: 24, from: "++##+    +##++", to: "++##+  ++ +##++" },
-  { i: 25, from: "++##+    +##++", to: "++##+ ++  +##++" },
-  { i: 28, from: ".++..    ..++.", to: ".++..  .. ..++." },
-]));
+  function addShield(lines, phase) {
+    return lines.map((row, i) => {
+      let add = "      ";
+      if (i >= 12 && i <= 17) add = (phase === 0 ? "  ++##" : " +++##");
+      if (i === 18) add = (phase === 0 ? "   ++ " : "  +++");
+      return row + add;
+    });
+  }
+  const P_GUARD1 = spriteFromStrings(addShield(P_IDLE.lines, 0));
+  const P_GUARD2 = spriteFromStrings(addShield(P_IDLE.lines, 1));
 
-const P_WALK2 = spriteFromStrings(repl(P_IDLE.lines, [
-  { i: 24, from: "++##+    +##++", to: "++##+ ++  +##++" },
-  { i: 25, from: "++##+    +##++", to: "++##+++   +##++" },
-  { i: 28, from: ".++..    ..++.", to: ".++.. ..  ..++." },
-]));
+  function addSword(lines, phase) {
+    return lines.map((row, i) => {
+      let add = "      ";
+      if (phase === 0 && (i === 15 || i === 16)) add = "   ++ ";
+      if (phase === 1 && (i === 13 || i === 14 || i === 15)) add = "  ++++";
+      if (phase === 2 && (i === 11 || i === 12 || i === 13 || i === 14)) add = " ++++++++";
+      if (phase === 2 && (i === 15 || i === 16)) add = "  ++++++";
+      if (phase === 3 && (i === 14 || i === 15)) add = "   +++";
+      return row + add;
+    });
+  }
+  const P_SLASH1 = spriteFromStrings(addSword(P_IDLE.lines, 0));
+  const P_SLASH2 = spriteFromStrings(addSword(P_IDLE.lines, 1));
+  const P_SLASH3 = spriteFromStrings(addSword(P_IDLE.lines, 2));
+  const P_SLASH4 = spriteFromStrings(addSword(P_IDLE.lines, 3));
 
-const P_WALK3 = spriteFromStrings(repl(P_IDLE.lines, [
-  { i: 24, from: "++##+    +##++", to: "++##+   ++##++" },
-  { i: 25, from: "++##+    +##++", to: "++##+  ++ +##+" },
-  { i: 28, from: ".++..    ..++.", to: ".++..  .. ..++." },
-]));
+  function pickPlayerSprite() {
+    if (player.act === "slash") {
+      const t = player.animT;
+      if (t < 0.09) return P_SLASH1;
+      if (t < 0.16) return P_SLASH2;
+      if (t < 0.28) return P_SLASH3;
+      return P_SLASH4;
+    }
+    if (player.guarding) return (Math.sin(state.t * 12) > 0) ? P_GUARD1 : P_GUARD2;
 
-const P_WALK4 = spriteFromStrings(repl(P_IDLE.lines, [
-  { i: 24, from: "++##+    +##++", to: "++##+  ++ +##++" },
-  { i: 25, from: "++##+    +##++", to: "++##+   ++##++" },
-  { i: 28, from: ".++..    ..++.", to: ".++.. ..  ..++." },
-]));
+    const sp = Math.hypot(player.vx, player.vy);
+    if (sp > 40) {
+      player.walkT += state.dt * 9.2;
+      const f = Math.floor(player.walkT) % 4;
+      return f === 0 ? P_WALK1 : (f === 1 ? P_WALK2 : (f === 2 ? P_WALK3 : P_WALK4));
+    }
+    player.walkT = 0;
+    return P_IDLE;
+  }
 
-// GUARD 2f (앞팔/방패 자세)
-function addShield(lines, phase) {
-  return lines.map((row, i) => {
-    if (i >= 12 && i <= 17) return row + (phase === 0 ? "  ++##" : " +++##");
-    if (i === 18) return row + (phase === 0 ? "   ++ " : "  +++");
-    return row + "      ";
-  });
-}
-const P_GUARD1 = spriteFromStrings(addShield(P_IDLE.lines, 0));
-const P_GUARD2 = spriteFromStrings(addShield(P_IDLE.lines, 1));
+  /* =========================
+     ENEMIES (2-frame breathe)
+  ========================= */
+  const E_WRAITH_A = spriteFromStrings([
+    "       ..++++..       ",
+    "     ..++####++..     ",
+    "    .++########++.    ",
+    "   .+############+.   ",
+    "  .+###++++++####+.   ",
+    "  +##++..++..++##+    ",
+    "  +##+..++++..+##+    ",
+    "  +##+..+..+..+##+    ",
+    "  +##+..++++..+##+    ",
+    "  +##++..++..++##+    ",
+    "  .+###++++++####+.   ",
+    "   .+############+.   ",
+    "    .++########++.    ",
+    "     ..++####++..     ",
+    "       ..++++..       ",
+    "    ..  ..  ..  ..    ",
+    "   .++.        .++.   ",
+    "   ++.          .++   ",
+    "   +.            .+   ",
+    "   +.            .+   ",
+    "   ++.          .++   ",
+    "   .++.        .++.   ",
+    "    ..++..  ..++..    ",
+    "      ..........      ",
+  ]);
+  const E_WRAITH_B = spriteFromStrings(E_WRAITH_A.lines.map((r, i) => {
+    if (i === 17) return r.replace("++.", ".++");
+    if (i === 18) return r.replace("+.", "++");
+    return r;
+  }));
 
-// SLASH 4f (칼 위치 “크게” 이동)
-function addSword(lines, phase) {
-  return lines.map((row, i) => {
-    let add = "      ";
-    if (phase === 0 && (i === 15 || i === 16)) add = "   ++ ";
-    if (phase === 1 && (i === 13 || i === 14 || i === 15)) add = "  ++++";
-    if (phase === 2 && (i === 11 || i === 12 || i === 13 || i === 14)) add = " ++++++++";
-    if (phase === 2 && (i === 15 || i === 16)) add = "  ++++++";
-    if (phase === 3 && (i === 14 || i === 15)) add = "   +++";
-    return row + add;
-  });
-}
-const P_SLASH1 = spriteFromStrings(addSword(P_IDLE.lines, 0));
-const P_SLASH2 = spriteFromStrings(addSword(P_IDLE.lines, 1));
-const P_SLASH3 = spriteFromStrings(addSword(P_IDLE.lines, 2));
-const P_SLASH4 = spriteFromStrings(addSword(P_IDLE.lines, 3));
+  const E_BRUTE_A = spriteFromStrings([
+    "     ..++######++..     ",
+    "   ..++##########++..   ",
+    "  .++##############++.  ",
+    " .+##################+. ",
+    " +####+++++++#########+ ",
+    " +##++..++..++..++###+  ",
+    " +##+..++++..++++..##+  ",
+    " +##+..+..+..+..+..##+  ",
+    " +##+..++++..++++..##+  ",
+    " +##++..++..++..++###+  ",
+    " +####+++++++#########+ ",
+    " .+##################+. ",
+    "  .++##############++.  ",
+    "   ..++##########++..   ",
+    "     ..++######++..     ",
+    "       ..++..++..       ",
+    "     ..++..  ..++..     ",
+    "    .++..      ..++.    ",
+    "    ++.          .++    ",
+    "    +.            .+    ",
+    "    ++.          .++    ",
+    "    .++..      ..++.    ",
+    "     ..++..  ..++..     ",
+    "       ..........       ",
+  ]);
+  const E_BRUTE_B = spriteFromStrings(E_BRUTE_A.lines.map((r, i) => {
+    if (i === 15) return r.replace("..++..++..", "..++.. ..");
+    return r;
+  }));
 
+  const E_DART_A = spriteFromStrings([
+    "      ..++++..      ",
+    "    ..++####++..    ",
+    "   .++########++.   ",
+    "  .+###########+.   ",
+    "  +###++++++### +   ",
+    "  +##+..++..+##+    ",
+    "  +##+..++++..##+   ",
+    "  +##+..+..+..##+   ",
+    "  +##+..++++..##+   ",
+    "  +##+..++..+##+    ",
+    "  +###++++++### +   ",
+    "  .+###########+.   ",
+    "   .++########++.   ",
+    "    ..++####++..    ",
+    "      ..++++..      ",
+    "    ..  ..  ..      ",
+    "   .++.      .++.    ",
+    "   ++.        .++    ",
+    "   +.          .+    ",
+    "   ++.        .++    ",
+    "   .++.      .++.    ",
+    "    ..++.. ..++..    ",
+    "      ..........     ",
+  ]);
+  const E_DART_B = spriteFromStrings(E_DART_A.lines.map((r, i) => {
+    if (i === 18) return r.replace("+.", "++");
+    return r;
+  }));
+
+  function pickEnemySprite(e) {
+    const breathe = (Math.sin(e.animT * 6.5) > 0);
+    if (e.type === "brute") return breathe ? E_BRUTE_A : E_BRUTE_B;
+    if (e.type === "dart") return breathe ? E_DART_A : E_DART_B;
+    return breathe ? E_WRAITH_A : E_WRAITH_B;
+  }
 
   /* =========================
      HUD / Game Over
@@ -726,18 +837,8 @@ const P_SLASH4 = spriteFromStrings(addSword(P_IDLE.lines, 3));
       const k = i / len;
       const jitter = Math.sin((k * 12 + state.t * 18)) * (heavy ? 3.0 : 2.1);
       const px = snap(x + nx * i - ny * jitter);
-      const py = snap(y + ny * i + nx * jitter);
+      const py = snap(y + nx * 0 + ny * i + nx * jitter);
       ctx.fillRect(px - w, py - 1, w * 2, 2);
-    }
-
-    ctx.globalAlpha = (heavy ? 0.28 : 0.22) * a;
-    const sparks = heavy ? 14 : 9;
-    for (let s = 0; s < sparks; s++) {
-      const i = rand(len * 0.15, len * 0.98);
-      const side = (s % 2 ? 1 : -1) * rand(12, 24);
-      const px = snap(x + nx * i - ny * side);
-      const py = snap(y + ny * i + nx * side);
-      ctx.fillRect(px, py, rand(12, 28), 1);
     }
 
     ctx.restore();
@@ -769,7 +870,6 @@ const P_SLASH4 = spriteFromStrings(addSword(P_IDLE.lines, 3));
     state.t += dt;
     player.animT += dt;
 
-    // ✅ hold timer updated here (safe)
     if (slashHoldT > 0) slashHoldT += dt;
 
     if (state.comboTimer > 0) {
@@ -837,7 +937,7 @@ const P_SLASH4 = spriteFromStrings(addSword(P_IDLE.lines, 3));
     player.x = clamp(player.x, 60, WORLD.w - 60);
     player.y = clamp(player.y, 80, WORLD.h - 60);
 
-    // enemies (backwards)
+    // enemies
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
       e.animT += dt;
@@ -857,7 +957,6 @@ const P_SLASH4 = spriteFromStrings(addSword(P_IDLE.lines, 3));
       const d = Math.hypot(dx, dy);
       if (d < e.r + player.r && player.invuln <= 0) {
         if (player.guarding) {
-          // parry first
           if (tryParryOnContact(i)) {
             player.invuln = 0.18;
             continue;
@@ -869,7 +968,6 @@ const P_SLASH4 = spriteFromStrings(addSword(P_IDLE.lines, 3));
           shake(10);
           hitStop(3);
           haptic(14);
-          // push enemy slightly
           e.x -= nx * 10;
           e.y -= ny * 10;
           e.stun = Math.max(e.stun, 0.08);
