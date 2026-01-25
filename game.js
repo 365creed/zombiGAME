@@ -563,260 +563,106 @@
     ctx2.globalAlpha = 1;
   }
 
-  /* =========================
-     PLAYER (HUMAN) 32x48
-  ========================= */
-  const P_IDLE = spriteFromStrings([
-    "                ..++++..                ",
-    "              ..++####++..              ",
-    "             .++########++.             ",
-    "            .+###++++++###+.            ",
-    "            +##++..++..++##+            ",
-    "            +##+..++++..+##+            ",
-    "            +###++....++### +           ",
-    "             .++########++.             ",
-    "               ..++##++..               ",
-    "              ..++####++..              ",
-    "            ..++########++..            ",
-    "           .++############++.           ",
-    "          .+####++++++#####+.           ",
-    "          +###++      ++###+            ",
-    "          +##+          +##+            ",
-    "          +##+    ++    +##+            ",
-    "          +##+    ++    +##+            ",
-    "          +###++      ++###+            ",
-    "          .+####++++++####+.            ",
-    "           .++##########++.             ",
-    "            ..++######++..              ",
-    "              .++####++.                ",
-    "             .++######++.               ",
-    "            .+###++++###+.              ",
-    "            +##+      +##+              ",
-    "            +##+      +##+              ",
-    "            +##+      +##+              ",
-    "            +##+      +##+              ",
-    "            +##+      +##+              ",
-    "            +###++  ++###+              ",
-    "             .++##++##++.               ",
-    "               .++##++.                 ",
-    "              ..+####+..                ",
-    "            ..++######++..              ",
-    "           .++##++..++##++.             ",
-    "           +##+        +##+             ",
-    "           +##+        +##+             ",
-    "           +##+        +##+             ",
-    "           .++..      ..++.             ",
-    "            ..++..  ..++..              ",
-    "              ..++..++..                ",
-    "                ..++++..                ",
-    "                  ....                  ",
-    "                                        ",
-    "                                        ",
-    "                                        ",
-    "                                        ",
-    "                                        ",
-  ]);
+ /* =========================
+   PLAYER (HUMAN) — REPLACE THIS WHOLE BLOCK
+   더 “사람”으로 읽히는 도트: 머리/머리카락/얼굴/도포/팔/다리/칼
+========================= */
 
-  function tweak(lines, edits) {
-    const out = lines.slice();
-    for (const { i, from, to } of edits) out[i] = out[i].replace(from, to);
-    return out;
-  }
-  const P_WALK1 = spriteFromStrings(tweak(P_IDLE.lines, [
-    { i: 34, from: "+##+        +##+", to: "+##+      ++ +##+" },
-    { i: 35, from: "+##+        +##+", to: "+##+     ++  +##+" },
-    { i: 37, from: ".++..      ..++.", to: ".++..   ..  ..++." },
-  ]));
-  const P_WALK2 = spriteFromStrings(tweak(P_IDLE.lines, [
-    { i: 34, from: "+##+        +##+", to: "+##+   ++   +##+" },
-    { i: 35, from: "+##+        +##+", to: "+##+  ++    +##+" },
-    { i: 37, from: ".++..      ..++.", to: ".++..  ..   ..++." },
-  ]));
-  const P_WALK3 = spriteFromStrings(tweak(P_IDLE.lines, [
-    { i: 34, from: "+##+        +##+", to: "+##+ ++     +##+" },
-    { i: 35, from: "+##+        +##+", to: "+##+++      +##+" },
-    { i: 37, from: ".++..      ..++.", to: ".++..  ..   ..++." },
-  ]));
-  const P_WALK4 = spriteFromStrings(tweak(P_IDLE.lines, [
-    { i: 34, from: "+##+        +##+", to: "+##+ ++     +##+" },
-    { i: 35, from: "+##+        +##+", to: "+##+  ++    +##+" },
-    { i: 37, from: ".++..      ..++.", to: ".++..   ..  ..++." },
-  ]));
+// 24x32 (모든 줄 길이 24 유지!)
+const P_IDLE = spriteFromStrings([
+  "        ..++++..        ",
+  "      ..++####++..      ",
+  "     .++########++.     ",
+  "     ++##++..++##++     ",
+  "    .+##+..++++..+#+.   ",
+  "    .+##+..+..+..+#+.   ",
+  "     ++##++....++##++   ",
+  "      .++########++.    ",
+  "        ..++##++..      ",
+  "         .++##++.       ",
+  "        .++####++.      ",
+  "      ..++######++..    ",
+  "     .++###++++###++.   ",
+  "     ++###+....+###++   ",
+  "     ++##+  ++  +##++   ",
+  "     ++##+  ++  +##++   ",
+  "     ++##+  ++  +##++   ",
+  "     ++##++....++##++   ",
+  "     .++###++++###++.   ",
+  "      .++########++.    ",
+  "        ..++##++..      ",
+  "        .++####++.      ",
+  "       .++######++.     ",
+  "      .++##++++##++.    ",
+  "      ++##+    +##++    ",
+  "      ++##+    +##++    ",
+  "      ++##+    +##++    ",
+  "      ++##+    +##++    ",
+  "      .++..    ..++.    ",
+  "       ..++.. ..++..    ",
+  "         ..++++..       ",
+  "           ....         ",
+]);
 
-  function addFrontShield(lines, phase) {
-    return lines.map((row, i) => {
-      if (i >= 13 && i <= 19) return row + (phase === 0 ? "   ++##" : "  +++##");
-      if (i === 20) return row + (phase === 0 ? "    ++ " : "   +++");
-      return row;
-    });
-  }
-  const P_GUARD1 = spriteFromStrings(addFrontShield(P_IDLE.lines, 0));
-  const P_GUARD2 = spriteFromStrings(addFrontShield(P_IDLE.lines, 1));
+// WALK 4f (다리 교차 + 도포 살짝 흔들림)
+function repl(lines, map) {
+  const out = lines.slice();
+  for (const m of map) out[m.i] = out[m.i].replace(m.from, m.to);
+  return out;
+}
 
-  function addSword(lines, phase) {
-    return lines.map((row, i) => {
-      if (phase === 0 && (i === 18 || i === 19)) return row + "    ++";
-      if (phase === 1 && (i === 16 || i === 17 || i === 18)) return row + "   ++++";
-      if (phase === 2 && (i === 14 || i === 15 || i === 16 || i === 17)) return row + "  ++++++++";
-      if (phase === 2 && (i === 18 || i === 19)) return row + "   ++++++";
-      if (phase === 3 && (i === 17 || i === 18)) return row + "    +++";
-      return row;
-    });
-  }
-  const P_SLASH1 = spriteFromStrings(addSword(P_IDLE.lines, 0));
-  const P_SLASH2 = spriteFromStrings(addSword(P_IDLE.lines, 1));
-  const P_SLASH3 = spriteFromStrings(addSword(P_IDLE.lines, 2));
-  const P_SLASH4 = spriteFromStrings(addSword(P_IDLE.lines, 3));
+const P_WALK1 = spriteFromStrings(repl(P_IDLE.lines, [
+  { i: 24, from: "++##+    +##++", to: "++##+  ++ +##++" },
+  { i: 25, from: "++##+    +##++", to: "++##+ ++  +##++" },
+  { i: 28, from: ".++..    ..++.", to: ".++..  .. ..++." },
+]));
 
-  /* =========================
-     ENEMIES (2-frame breathe)
-  ========================= */
-  const E_WRAITH_A = spriteFromStrings([
-    "             .......            ",
-    "          ..++#####++..         ",
-    "        ..++#########++..       ",
-    "       .++#############++.      ",
-    "      .+####+++++++#####+.      ",
-    "     .+###++.....++###++#+.     ",
-    "    ..+##+..++..++..+##+..+.    ",
-    "    ..+##+..++.... ..+##+..+.   ",
-    "    ..+##+..++..++..+##+..+.    ",
-    "     .+###++.....++###++#+.     ",
-    "      .+####+++++++#####+.      ",
-    "       .++#############++.      ",
-    "        ..++#########++..       ",
-    "          ..++#####++..         ",
-    "             .......            ",
-    "         ..  ..   ..  ..        ",
-    "       ..+..       ..+..        ",
-    "      .++..         ..++.       ",
-    "      .+..           ..+.       ",
-    "     ..+.             .+..      ",
-    "     ..+.             .+..      ",
-    "      .+.             .+.       ",
-    "      .++.           .++.       ",
-    "       ..++..     ..++..        ",
-    "         .............          ",
-    "           ..++++..             ",
-    "         ..++####++..           ",
-    "         ..++####++..           ",
-    "           ..++++..             ",
-    "             ....               ",
-    "                                ",
-    "                                ",
-  ]);
-  const E_WRAITH_B = spriteFromStrings(E_WRAITH_A.lines.map((r, i) => {
-    if (i === 18) return r.replace("..+.", ".++.");
-    if (i === 21) return r.replace(".+.", "++.");
-    return r;
-  }));
+const P_WALK2 = spriteFromStrings(repl(P_IDLE.lines, [
+  { i: 24, from: "++##+    +##++", to: "++##+ ++  +##++" },
+  { i: 25, from: "++##+    +##++", to: "++##+++   +##++" },
+  { i: 28, from: ".++..    ..++.", to: ".++.. ..  ..++." },
+]));
 
-  const E_BRUTE_A = spriteFromStrings([
-    "         ..++######++..         ",
-    "       ..++##########++..       ",
-    "      .++##############++.      ",
-    "     .+##################+.     ",
-    "     .+####+++++++####### +.    ",
-    "    ..+###++.....++###++##+.    ",
-    "    ..+##+..++..++..+##+..+.    ",
-    "    ..+##+..++..++..+##+..+.    ",
-    "    ..+##+..++..++..+##+..+.    ",
-    "    ..+###++.....++###++##+.    ",
-    "     .+####+++++++####### +.    ",
-    "     .+##################+.     ",
-    "      .++##############++.      ",
-    "       ..++##########++..       ",
-    "         ..++######++..         ",
-    "          ..++....++..          ",
-    "        ..++..    ..++..        ",
-    "      ..++..        ..++..      ",
-    "     .++..            ..++.     ",
-    "     .+..              ..+.     ",
-    "    ..+.                .+..    ",
-    "    ..+.                .+..    ",
-    "     .+.                .+.     ",
-    "     .++.              .++.     ",
-    "      ..++..        ..++..      ",
-    "        ..++..    ..++..        ",
-    "          ............          ",
-    "         ..++......++..         ",
-    "       ..++..      ..++..       ",
-    "       ..++.        .++..       ",
-    "         ..          ..         ",
-    "                                ",
-  ]);
-  const E_BRUTE_B = spriteFromStrings(E_BRUTE_A.lines.map((r, i) => {
-    if (i === 15) return r.replace("..++....++..", "..++.. ..++..");
-    if (i === 23) return r.replace(".++.              .++.", ".++..            ..++.");
-    return r;
-  }));
+const P_WALK3 = spriteFromStrings(repl(P_IDLE.lines, [
+  { i: 24, from: "++##+    +##++", to: "++##+   ++##++" },
+  { i: 25, from: "++##+    +##++", to: "++##+  ++ +##+" },
+  { i: 28, from: ".++..    ..++.", to: ".++..  .. ..++." },
+]));
 
-  const E_DART_A = spriteFromStrings([
-    "            ..++++..            ",
-    "          ..++####++..          ",
-    "         .++########++.         ",
-    "        .+###########+.         ",
-    "       .+###++++++### +.        ",
-    "      ..+##+......+##+..        ",
-    "      ..+##+..++..+##+..        ",
-    "      ..+##+..++..+##+..        ",
-    "      ..+##+......+##+..        ",
-    "       .+###++++++### +.        ",
-    "        .+##########+.          ",
-    "         .++########++.         ",
-    "          ..++####++..          ",
-    "            ..++++..            ",
-    "         ..  ..  ..  ..         ",
-    "       ..+..        ..+..       ",
-    "      .++..          ..++.      ",
-    "      .+..            ..+.      ",
-    "      .+.              .+.      ",
-    "      .+.              .+.      ",
-    "      .+.              .+.      ",
-    "      .++.            .++.      ",
-    "       ..++..      ..++..       ",
-    "         ..............         ",
-    "            ..  ..              ",
-    "           .++. .++.             ",
-    "          .++.   .++.            ",
-    "          ++.     .++            ",
-    "          +.       .+            ",
-    "                                ",
-    "                                ",
-    "                                ",
-  ]);
-  const E_DART_B = spriteFromStrings(E_DART_A.lines.map((r, i) => {
-    if (i === 18) return r.replace(".+.              .+.", ".++            ++.");
-    if (i === 19) return r.replace(".+.              .+.", ".++            ++.");
-    return r;
-  }));
+const P_WALK4 = spriteFromStrings(repl(P_IDLE.lines, [
+  { i: 24, from: "++##+    +##++", to: "++##+  ++ +##++" },
+  { i: 25, from: "++##+    +##++", to: "++##+   ++##++" },
+  { i: 28, from: ".++..    ..++.", to: ".++.. ..  ..++." },
+]));
 
-  function pickEnemySprite(e) {
-    const breathe = (Math.sin(e.animT * 6.5) > 0);
-    if (e.type === "brute") return breathe ? E_BRUTE_A : E_BRUTE_B;
-    if (e.type === "dart") return breathe ? E_DART_A : E_DART_B;
-    return breathe ? E_WRAITH_A : E_WRAITH_B;
-  }
+// GUARD 2f (앞팔/방패 자세)
+function addShield(lines, phase) {
+  return lines.map((row, i) => {
+    if (i >= 12 && i <= 17) return row + (phase === 0 ? "  ++##" : " +++##");
+    if (i === 18) return row + (phase === 0 ? "   ++ " : "  +++");
+    return row + "      ";
+  });
+}
+const P_GUARD1 = spriteFromStrings(addShield(P_IDLE.lines, 0));
+const P_GUARD2 = spriteFromStrings(addShield(P_IDLE.lines, 1));
 
-  function pickPlayerSprite() {
-    if (player.act === "slash") {
-      const t = player.animT;
-      if (t < 0.09) return P_SLASH1;
-      if (t < 0.16) return P_SLASH2;
-      if (t < 0.28) return P_SLASH3;
-      return P_SLASH4;
-    }
-    if (player.guarding) return (Math.sin(state.t * 12) > 0) ? P_GUARD1 : P_GUARD2;
+// SLASH 4f (칼 위치 “크게” 이동)
+function addSword(lines, phase) {
+  return lines.map((row, i) => {
+    let add = "      ";
+    if (phase === 0 && (i === 15 || i === 16)) add = "   ++ ";
+    if (phase === 1 && (i === 13 || i === 14 || i === 15)) add = "  ++++";
+    if (phase === 2 && (i === 11 || i === 12 || i === 13 || i === 14)) add = " ++++++++";
+    if (phase === 2 && (i === 15 || i === 16)) add = "  ++++++";
+    if (phase === 3 && (i === 14 || i === 15)) add = "   +++";
+    return row + add;
+  });
+}
+const P_SLASH1 = spriteFromStrings(addSword(P_IDLE.lines, 0));
+const P_SLASH2 = spriteFromStrings(addSword(P_IDLE.lines, 1));
+const P_SLASH3 = spriteFromStrings(addSword(P_IDLE.lines, 2));
+const P_SLASH4 = spriteFromStrings(addSword(P_IDLE.lines, 3));
 
-    const sp = Math.hypot(player.vx, player.vy);
-    if (sp > 40) {
-      player.walkT += state.dt * 9.2;
-      const f = Math.floor(player.walkT) % 4;
-      return f === 0 ? P_WALK1 : (f === 1 ? P_WALK2 : (f === 2 ? P_WALK3 : P_WALK4));
-    }
-    player.walkT = 0;
-    return P_IDLE;
-  }
 
   /* =========================
      HUD / Game Over
