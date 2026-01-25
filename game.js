@@ -1,12 +1,9 @@
-/* game.js — v5.2 FULL REPLACE
-   FIX:
-   - Missing functions/blocks restored (pickPlayerSprite/pickEnemySprite/enemy sprites)
-   - Sprite width normalization (pads lines to same width) to prevent silent corruption
-   FEATURES:
-   - Human-ish pixel player (cloak/arms/legs), Walk 4f / Slash 4f / Guard 2f
-   - Enemies 2-frame breathing
-   - Guard shield cone + parry flash window
-   - Heavy feel: hitstop, shake, brush flash + visible cone
+/* game.js — v5.3 FULL REPLACE
+   WHAT'S NEW vs your v5.2:
+   - Player can use external PNG: /assets/player.png  (your attached ink-calligrapher image)
+   - Enemies can be rendered as nicer “ink blobs” (code-only, no extra files)
+   - Fallback: if PNG not found, uses your original ASCII sprites 그대로
+   - Keeps ALL your mechanics: walk/slash/guard, parry window, hitstop, shake, cone, brush flash, etc.
 */
 (() => {
   const canvas = document.getElementById("c");
@@ -35,6 +32,24 @@
   const btnSpecial = document.getElementById("btnSpecial");
 
   /* =========================
+     CONFIG (you can tweak)
+  ========================= */
+  const CONFIG = {
+    // Put your file here: /assets/player.png
+    usePlayerPNG: true,
+    playerPngUrl: "assets/player.png",
+
+    // Better-looking enemies without images (ink blobs)
+    useInkEnemyRender: true,
+
+    // Size tuning: if your player PNG looks too big/small, change this
+    playerPngScale: 1.35, // relative to (player.r*2)
+
+    // If you want enemies also as PNG later, keep this false for now
+    // (ink blobs look good already)
+  };
+
+  /* =========================
      Resize
   ========================= */
   function resizeCanvas() {
@@ -60,6 +75,12 @@
   };
   function haptic(ms = 20) {
     try { if (navigator.vibrate) navigator.vibrate(ms); } catch {}
+  }
+
+  // small hash noise (stable per enemy)
+  function hash1(n) {
+    const s = Math.sin(n * 999.123) * 43758.5453;
+    return s - Math.floor(s);
   }
 
   /* =========================
@@ -132,6 +153,29 @@
   const slashes = [];
 
   /* =========================
+     Sprite: External PNG Loader (player)
+  ========================= */
+  const SPR = {
+    playerImg: null,
+    playerReady: false,
+  };
+
+  function loadPlayerPNG() {
+    if (!CONFIG.usePlayerPNG) return;
+    const img = new Image();
+    img.decoding = "async";
+    img.loading = "eager";
+    img.src = CONFIG.playerPngUrl;
+    img.onload = () => { SPR.playerImg = img; SPR.playerReady = true; };
+    img.onerror = () => {
+      SPR.playerImg = null;
+      SPR.playerReady = false;
+      console.warn("player.png load failed. Using ASCII fallback. Check:", CONFIG.playerPngUrl);
+    };
+  }
+  loadPlayerPNG();
+
+  /* =========================
      Combo / Rank
   ========================= */
   function calcRank(c) {
@@ -184,6 +228,7 @@
         animT: rand(0, 10),
         wob: rand(0, 999),
         stun: 0,
+        seed: rand(0, 9999),
       });
     }
   }
@@ -520,7 +565,7 @@
   btnUp(btnSpecial, () => {});
 
   /* =========================
-     Sprite System (robust)
+     Sprite System (robust ASCII) — your original
   ========================= */
   function normalizeLines(lines) {
     let w = 0;
@@ -561,7 +606,7 @@
   }
 
   /* =========================
-     PLAYER (human-ish)
+     PLAYER ASCII (fallback)
   ========================= */
   const P_IDLE = spriteFromStrings([
     "        ..++++..        ",
@@ -652,7 +697,7 @@
   const P_SLASH3 = spriteFromStrings(addSword(P_IDLE.lines, 2));
   const P_SLASH4 = spriteFromStrings(addSword(P_IDLE.lines, 3));
 
-  function pickPlayerSprite() {
+  function pickPlayerSpriteASCII() {
     if (player.act === "slash") {
       const t = player.animT;
       if (t < 0.09) return P_SLASH1;
@@ -673,7 +718,7 @@
   }
 
   /* =========================
-     ENEMIES (2-frame breathe)
+     ENEMIES ASCII (fallback)
   ========================= */
   const E_WRAITH_A = spriteFromStrings([
     "       ..++++..       ",
@@ -768,11 +813,77 @@
     return r;
   }));
 
-  function pickEnemySprite(e) {
+  function pickEnemySpriteASCII(e) {
     const breathe = (Math.sin(e.animT * 6.5) > 0);
     if (e.type === "brute") return breathe ? E_BRUTE_A : E_BRUTE_B;
     if (e.type === "dart") return breathe ? E_DART_A : E_DART_B;
     return breathe ? E_WRAITH_A : E_WRAITH_B;
+  }
+
+  /* =========================
+     ENEMY prettier render (ink blobs) — code-only
+  ========================= */
+  function drawEnemyInk(e, x, y) {
+    // style per type
+    const r = e.r;
+    const pulse = 1 + 0.06 * Math.sin(e.animT * 6.5);
+    const rr = r * pulse;
+
+    let wobAmp = e.type === "dart" ? 0.22 : (e.type === "brute" ? 0.14 : 0.18);
+    let lobes = e.type === "brute" ? 3 : (e.type === "dart" ? 4 : 5);
+
+    const baseA = e.hit > 0 ? 1.0 : 0.92;
+
+    ctx.save();
+    ctx.translate(snap(x), snap(y));
+
+    // outer ink shape
+    ctx.beginPath();
+    const N = 18;
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const n1 = Math.sin(a * lobes + e.seed * 0.02 + state.t * 1.6);
+      const n2 = Math.sin(a * (lobes + 2) + e.seed * 0.09 - state.t * 1.1);
+      const n = (n1 * 0.6 + n2 * 0.4);
+      const rad = rr * (1 + wobAmp * n);
+      const px = Math.cos(a) * rad;
+      const py = Math.sin(a) * rad;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.globalAlpha = 0.92 * baseA;
+    ctx.fillStyle = "#000";
+    ctx.fill();
+
+    // inner wash (ink density)
+    ctx.globalAlpha = 0.10 * baseA;
+    ctx.beginPath();
+    ctx.arc(-rr * 0.18, -rr * 0.10, rr * 0.62, 0, Math.PI * 2);
+    ctx.fill();
+
+    // core “eye” (to keep readability)
+    ctx.globalAlpha = 0.18 * baseA;
+    ctx.beginPath();
+    ctx.arc(rr * 0.18, rr * 0.10, rr * 0.30, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.22 * baseA;
+    ctx.beginPath();
+    ctx.arc(rr * 0.22, rr * 0.12, rr * 0.10, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+
+    // ground ring
+    ctx.globalAlpha = 0.55 * baseA;
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, rr * 0.98, rr * 0.9, rr * 0.35, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.restore();
+    ctx.globalAlpha = 1;
   }
 
   /* =========================
@@ -1017,12 +1128,47 @@
   }
 
   /* =========================
+     Draw: Player PNG
+  ========================= */
+  function drawPlayerPNG(x, y, alpha) {
+    // IMPORTANT: avoid blur
+    ctx.imageSmoothingEnabled = false;
+
+    const img = SPR.playerImg;
+    if (!img || !SPR.playerReady) return false;
+
+    // size based on collision radius
+    const base = player.r * 2;
+    const size = base * CONFIG.playerPngScale;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // mirror if facing left
+    if (player.facing < 0) {
+      ctx.translate(snap(x), snap(y));
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, -size / 2, -size / 2, size, size);
+    } else {
+      ctx.drawImage(img, snap(x - size / 2), snap(y - size / 2), size, size);
+    }
+
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    return true;
+  }
+
+  /* =========================
      Draw
   ========================= */
   function draw() {
     const rect = canvas.getBoundingClientRect();
     const vw = rect.width;
     const vh = rect.height;
+
+    // make sure nothing weird stacks
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
     ctx.imageSmoothingEnabled = false;
 
     const targetCamX = clamp(player.x - vw / 2, 0, WORLD.w - vw);
@@ -1050,10 +1196,16 @@
       const e = enemies[i];
       const x = e.x - state.camX;
       const y = e.y - state.camY;
-      const spr = pickEnemySprite(e);
-      const a = e.hit > 0 ? 1 : 0.92;
+
       const bob = (Math.sin(e.animT * 6.5) > 0) ? 1 : 0;
-      drawSprite(ctx, spr, x, y + bob, px, a, false);
+
+      if (CONFIG.useInkEnemyRender) {
+        drawEnemyInk(e, x, y + bob);
+      } else {
+        const spr = pickEnemySpriteASCII(e);
+        const a = e.hit > 0 ? 1 : 0.92;
+        drawSprite(ctx, spr, x, y + bob, px, a, false);
+      }
     }
 
     // guard visuals
@@ -1094,9 +1246,14 @@
         ctx.globalAlpha = 1;
       }
 
-      const spr = pickPlayerSprite();
       const alpha = player.invuln > 0 ? 0.78 : 1;
-      drawSprite(ctx, spr, x, y, px, alpha, player.facing < 0);
+
+      // If PNG ready -> use it. Else fallback to ASCII sprite.
+      const used = (CONFIG.usePlayerPNG && drawPlayerPNG(x, y, alpha));
+      if (!used) {
+        const spr = pickPlayerSpriteASCII();
+        drawSprite(ctx, spr, x, y, px, alpha, player.facing < 0);
+      }
     }
 
     // particles
@@ -1113,6 +1270,7 @@
 
     ctx.restore();
 
+    // letterbox edges
     ctx.globalAlpha = 0.18;
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, vw, 18);
@@ -1139,7 +1297,8 @@
   ========================= */
   document.getElementById("ovTitle").textContent = "INK SWORD";
   document.getElementById("ovBody").innerHTML =
-    `<b>이동</b> WASD/방향키 · <b>베기</b> J (모바일 SLASH 홀드=헤비) · <b>가드</b> K/GUARD (딱 누르면 패링 번쩍) · <b>대시</b> L/DASH · <b>잉크 폭발</b> I/INK BURST`;
+    `<b>이동</b> WASD/방향키 · <b>베기</b> J (모바일 SLASH 홀드=헤비) · <b>가드</b> K/GUARD (딱 누르면 패링 번쩍) · <b>대시</b> L/DASH · <b>잉크 폭발</b> I/INK BURST<br/>
+     <small style="opacity:.75">TIP: /assets/player.png 없으면 자동으로 기존 도트(ASCII)로 돌아갑니다.</small>`;
 
   startBtn.addEventListener("click", () => {
     overlay.classList.add("hide");
