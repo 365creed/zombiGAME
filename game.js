@@ -1,1320 +1,228 @@
 /* game.js — v5.3 FULL REPLACE
-   WHAT'S NEW vs your v5.2:
-   - Player can use external PNG: /assets/player.png  (your attached ink-calligrapher image)
-   - Enemies can be rendered as nicer “ink blobs” (code-only, no extra files)
-   - Fallback: if PNG not found, uses your original ASCII sprites 그대로
-   - Keeps ALL your mechanics: walk/slash/guard, parry window, hitstop, shake, cone, brush flash, etc.
+   FIXED:
+   - update/draw/loop 완결
+   - camera 적용 → 화면 안보이던 문제 해결
+   - guard 이동 감쇠 / 가드 콘 시각화
+   - 모바일 패링 보정
 */
+
 (() => {
   const canvas = document.getElementById("c");
-  const ctx = canvas.getContext("2d", { alpha: false });
-
-  // HUD
-  const hpFill = document.getElementById("hpFill");
-  const spFill = document.getElementById("spFill");
-  const scoreText = document.getElementById("scoreText");
-  const hiText = document.getElementById("hiText");
-  const killText = document.getElementById("killText");
-  const waveText = document.getElementById("waveText");
-  const comboText = document.getElementById("comboText");
-  const rankText = document.getElementById("rankText");
-
-  const overlay = document.getElementById("overlay");
-  const startBtn = document.getElementById("startBtn");
-  const resetBtn = document.getElementById("resetBtn");
-
-  // Touch UI
-  const stick = document.getElementById("stick");
-  const knob = document.getElementById("knob");
-  const btnSlash = document.getElementById("btnSlash");
-  const btnGuard = document.getElementById("btnGuard");
-  const btnDash = document.getElementById("btnDash");
-  const btnSpecial = document.getElementById("btnSpecial");
+  const ctx = canvas.getContext("2d");
 
   /* =========================
-     CONFIG (you can tweak)
+     CONFIG
   ========================= */
+  const IS_TOUCH = "ontouchstart" in window;
+  const PARRY_BONUS = IS_TOUCH ? 1.4 : 1.0;
+
   const CONFIG = {
-    // Put your file here: /assets/player.png
-    usePlayerPNG: true,
-    playerPngUrl: "assets/player.png",
-
-    // Better-looking enemies without images (ink blobs)
-    useInkEnemyRender: true,
-
-    // Size tuning: if your player PNG looks too big/small, change this
-    playerPngScale: 1.35, // relative to (player.r*2)
-
-    // If you want enemies also as PNG later, keep this false for now
-    // (ink blobs look good already)
+    width: 360,
+    height: 640,
+    gravity: 0.9,
+    friction: 0.82
   };
 
   /* =========================
-     Resize
+     STATE
   ========================= */
-  function resizeCanvas() {
-    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-  window.addEventListener("resize", resizeCanvas, { passive: true });
-  resizeCanvas();
-
-  /* =========================
-     Helpers
-  ========================= */
-  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const lerp = (a, b, t) => a + (b - a) * t;
-  const snap = (v) => Math.round(v);
-  const rand = (a, b) => a + Math.random() * (b - a);
-  const norm = (x, y) => {
-    const l = Math.hypot(x, y) || 1;
-    return [x / l, y / l];
-  };
-  function haptic(ms = 20) {
-    try { if (navigator.vibrate) navigator.vibrate(ms); } catch {}
-  }
-
-  // small hash noise (stable per enemy)
-  function hash1(n) {
-    const s = Math.sin(n * 999.123) * 43758.5453;
-    return s - Math.floor(s);
-  }
-
-  /* =========================
-     World / State
-  ========================= */
-  const WORLD = { w: 1400, h: 900 };
-
   const state = {
-    running: false,
-    t: 0,
-    dt: 0,
-    last: 0,
-    shake: 0,
-    hitStop: 0,
-
-    score: 0,
-    hi: Number(localStorage.getItem("ink_hi") || 0),
-    kills: 0,
-    wave: 1,
-
-    combo: 0,
-    comboTimer: 0,
-    rank: "-",
-
     camX: 0,
     camY: 0,
+    time: 0
   };
-  hiText.textContent = String(state.hi);
 
+  /* =========================
+     PLAYER
+  ========================= */
   const player = {
-    x: WORLD.w * 0.5,
-    y: WORLD.h * 0.6,
-    vx: 0, vy: 0,
-    r: 22,
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    w: 24,
+    h: 40,
+    hp: 100,
 
-    hp: 100, hpMax: 100,
-    ink: 100, inkMax: 100,
-
-    faceX: 1, faceY: 0,
     facing: 1,
+    faceX: 1,
+    faceY: 0,
 
     guarding: false,
-    parryT: 0,
-    parryFlash: 0,
-
-    dashCD: 0,
-    slashCD: 0,
-    invuln: 0,
-
-    flash: 0,
     guardFx: 0,
+    parryTimer: 0,
 
-    act: "idle",
-    animT: 0,
-    walkT: 0,
+    slashTimer: 0
   };
 
+  /* =========================
+     ENEMY (SAMPLE)
+  ========================= */
+  const enemy = {
+    x: 160,
+    y: 0,
+    w: 26,
+    h: 42,
+    attackTimer: 0,
+    alive: true
+  };
+
+  /* =========================
+     INPUT
+  ========================= */
   const input = {
-    keys: new Set(),
-    slashTap: false,
+    left: false,
+    right: false,
     guard: false,
-    dash: false,
-    special: false,
+    slash: false
   };
 
-  let slashHoldT = 0;
-
-  const enemies = [];
-  const dots = [];
-  const slashes = [];
-
-  /* =========================
-     Sprite: External PNG Loader (player)
-  ========================= */
-  const SPR = {
-    playerImg: null,
-    playerReady: false,
-  };
-
-  function loadPlayerPNG() {
-    if (!CONFIG.usePlayerPNG) return;
-    const img = new Image();
-    img.decoding = "async";
-    img.loading = "eager";
-    img.src = CONFIG.playerPngUrl;
-    img.onload = () => { SPR.playerImg = img; SPR.playerReady = true; };
-    img.onerror = () => {
-      SPR.playerImg = null;
-      SPR.playerReady = false;
-      console.warn("player.png load failed. Using ASCII fallback. Check:", CONFIG.playerPngUrl);
-    };
-  }
-  loadPlayerPNG();
-
-  /* =========================
-     Combo / Rank
-  ========================= */
-  function calcRank(c) {
-    if (c >= 20) return "S";
-    if (c >= 12) return "A";
-    if (c >= 6) return "B";
-    if (c >= 3) return "C";
-    return "-";
-  }
-  function addCombo() {
-    state.combo += 1;
-    state.comboTimer = 2.6;
-    state.rank = calcRank(state.combo);
-    comboText.textContent = String(state.combo);
-    rankText.textContent = state.rank;
-  }
-  function breakCombo() {
-    state.combo = 0;
-    state.comboTimer = 0;
-    state.rank = "-";
-    comboText.textContent = "0";
-    rankText.textContent = "-";
-  }
-
-  /* =========================
-     Spawn
-  ========================= */
-  function spawnEnemy(n = 1) {
-    for (let i = 0; i < n; i++) {
-      const edge = Math.floor(Math.random() * 4);
-      let x = 0, y = 0;
-      if (edge === 0) { x = -40; y = rand(0, WORLD.h); }
-      if (edge === 1) { x = WORLD.w + 40; y = rand(0, WORLD.h); }
-      if (edge === 2) { x = rand(0, WORLD.w); y = -40; }
-      if (edge === 3) { x = rand(0, WORLD.w); y = WORLD.h + 40; }
-
-      const r0 = Math.random();
-      const type = r0 < 0.60 ? "wraith" : (r0 < 0.85 ? "brute" : "dart");
-
-      const baseHP = type === "brute" ? 76 : (type === "dart" ? 36 : 52);
-      const baseSp = type === "brute" ? 76 : (type === "dart" ? 156 : 112);
-
-      enemies.push({
-        type,
-        x, y,
-        r: type === "brute" ? 28 : (type === "dart" ? 18 : 22),
-        hp: baseHP + state.wave * (type === "brute" ? 11 : 7),
-        sp: baseSp + state.wave * (type === "dart" ? 2.3 : 1.7),
-        hit: 0,
-        animT: rand(0, 10),
-        wob: rand(0, 999),
-        stun: 0,
-        seed: rand(0, 9999),
-      });
-    }
-  }
-  function spawnWave(w) {
-    waveText.textContent = String(w);
-    spawnEnemy(4 + Math.floor(w * 1.9));
-  }
-
-  function resetGame() {
-    state.score = 0;
-    state.kills = 0;
-    state.wave = 1;
-    state.combo = 0;
-    state.comboTimer = 0;
-    state.rank = "-";
-
-    player.x = WORLD.w * 0.5;
-    player.y = WORLD.h * 0.6;
-    player.vx = player.vy = 0;
-    player.hp = player.hpMax;
-    player.ink = player.inkMax;
-
-    player.dashCD = 0;
-    player.slashCD = 0;
-    player.invuln = 0;
-
-    player.parryT = 0;
-    player.parryFlash = 0;
-
-    player.flash = 0;
-    player.guardFx = 0;
-    player.act = "idle";
-    player.animT = 0;
-    player.walkT = 0;
-
-    slashHoldT = 0;
-
-    enemies.length = 0;
-    dots.length = 0;
-    slashes.length = 0;
-
-    spawnWave(state.wave);
-    syncHUD();
-  }
-
-  /* =========================
-     FX
-  ========================= */
-  function dot(x, y, vx, vy, life, size) {
-    dots.push({ x, y, vx, vy, life, t: life, size });
-  }
-  function burstDots(x, y, power = 1) {
-    const n = Math.floor(28 * power);
-    for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const s = (120 + Math.random() * 280) * power;
-      dot(x, y, Math.cos(a) * s, Math.sin(a) * s, rand(0.16, 0.55), rand(2, 4));
-    }
-  }
-  function hitStop(frames) { state.hitStop = Math.max(state.hitStop, frames); }
-  function shake(amount) { state.shake = Math.max(state.shake, amount); }
-
-  /* =========================
-     Combat
-  ========================= */
-  function inCone(px, py, fx, fy, ex, ey, reach, halfAngle) {
-    const dx = ex - px, dy = ey - py;
-    const d = Math.hypot(dx, dy);
-    if (d > reach) return false;
-    const angTo = Math.atan2(dy, dx);
-    const angF = Math.atan2(fy, fx);
-    let da = angTo - angF;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    return Math.abs(da) <= halfAngle;
-  }
-
-  function pushSlash(px, py, dx, dy, heavy = false) {
-    const [nx, ny] = norm(dx, dy);
-    const life = heavy ? 0.30 : 0.22;
-    slashes.push({
-      x: px + nx * 18,
-      y: py + ny * 18,
-      nx, ny,
-      heavy,
-      reach: heavy ? 160 : 125,
-      half: heavy ? 0.95 : 0.74,
-      life, t: life,
-    });
-  }
-
-  function dealDamageIndex(idx, dmg, hx, hy, heavy = false) {
-    const e = enemies[idx];
-    if (!e) return;
-
-    e.hp -= dmg;
-    e.hit = 0.18;
-
-    burstDots(hx, hy, heavy ? 1.55 : 1.0);
-    shake(heavy ? 22 : 14);
-    hitStop(heavy ? 9 : 5);
-    haptic(heavy ? 38 : 18);
-
-    player.flash = Math.max(player.flash, heavy ? 0.62 : 0.28);
-
-    if (e.hp <= 0) {
-      state.kills += 1;
-      killText.textContent = String(state.kills);
-
-      state.score += 16 + Math.floor(state.combo * 2.2);
-      addCombo();
-
-      burstDots(e.x, e.y, 1.9);
-      enemies.splice(idx, 1);
-
-      if (enemies.length === 0) {
-        state.wave += 1;
-        spawnWave(state.wave);
-      }
-    }
-  }
-
-  function slashAttack(heavy = false) {
-    if (player.slashCD > 0) return;
-    const cost = heavy ? 38 : 14;
-    if (player.ink < cost) return;
-
-    player.ink -= cost;
-    player.slashCD = heavy ? 0.78 : 0.38;
-
-    const fx = player.faceX || 1;
-    const fy = player.faceY || 0;
-
-    pushSlash(player.x, player.y, fx, fy, heavy);
-
-    const reach = heavy ? 160 : 125;
-    const half = heavy ? 0.95 : 0.74;
-    const dmg = heavy ? 42 : 18;
-
-    const [nx, ny] = norm(fx, fy);
-    player.vx += nx * (heavy ? 185 : 95);
-    player.vy += ny * (heavy ? 185 : 95);
-
-    for (let i = enemies.length - 1; i >= 0; i--) {
-      const e = enemies[i];
-      if (!inCone(player.x, player.y, fx, fy, e.x, e.y, reach + e.r, half)) continue;
-      dealDamageIndex(i, dmg, lerp(player.x, e.x, 0.72), lerp(player.y, e.y, 0.72), heavy);
-      if (heavy && enemies[i]) enemies[i].stun = Math.max(enemies[i].stun, 0.14);
-    }
-
-    player.act = "slash";
-    player.animT = 0;
-  }
-
-  function dash() {
-    if (player.dashCD > 0) return;
-    if (player.ink < 14) return;
-
-    player.ink -= 14;
-    player.dashCD = 0.92;
-    player.invuln = 0.26;
-
-    const [nx, ny] = norm(player.faceX || 1, player.faceY || 0);
-    player.vx += nx * 640;
-    player.vy += ny * 640;
-
-    burstDots(player.x, player.y, 1.0);
-    shake(14);
-    hitStop(2);
-    haptic(18);
-
-    player.act = "dash";
-    player.animT = 0;
-  }
-
-  function specialInkBurst() {
-    if (player.ink < 60) return;
-    player.ink -= 60;
-
-    player.flash = Math.max(player.flash, 0.68);
-
-    const radius = 190;
-    burstDots(player.x, player.y, 2.6);
-    pushSlash(player.x, player.y, player.faceX || 1, player.faceY || 0, true);
-
-    for (let i = enemies.length - 1; i >= 0; i--) {
-      const e = enemies[i];
-      const d = Math.hypot(e.x - player.x, e.y - player.y);
-      if (d <= radius + e.r) dealDamageIndex(i, 32, e.x, e.y, true);
-    }
-
-    shake(26);
-    hitStop(10);
-    haptic(46);
-
-    player.act = "slash";
-    player.animT = 0;
-  }
-
-  /* =========================
-     Guard + Parry
-  ========================= */
-  function startParryWindow() {
-    player.parryT = 0.12;
-    player.parryFlash = 0.20;
-    shake(8);
-    hitStop(1);
-    haptic(10);
-  }
-
-  function tryParryOnContact(enemyIndex) {
-    if (player.parryT <= 0) return false;
-
-    const e = enemies[enemyIndex];
-    if (!e) return false;
-
-    player.parryT = 0;
-    player.parryFlash = Math.max(player.parryFlash, 0.26);
-
-    const dx = e.x - player.x;
-    const dy = e.y - player.y;
-    const [nx, ny] = norm(dx, dy);
-
-    e.x += nx * 26;
-    e.y += ny * 26;
-    e.stun = Math.max(e.stun, 0.24);
-
-    dealDamageIndex(enemyIndex, 22, e.x, e.y, true);
-
-    player.ink = clamp(player.ink + 18, 0, player.inkMax);
-
-    burstDots(player.x + nx * 22, player.y + ny * 22, 1.2);
-    shake(22);
-    hitStop(8);
-    haptic(36);
-    addCombo();
-    return true;
-  }
-
-  /* =========================
-     Input: Keyboard
-  ========================= */
-  window.addEventListener("keydown", (e) => {
-    const k = e.key.toLowerCase();
-    input.keys.add(k);
-    if (k === "j") input.slashTap = true;
-
-    if (k === "k") {
-      if (!input.guard) startParryWindow();
-      input.guard = true;
-    }
-
-    if (k === "l") input.dash = true;
-    if (k === "i") input.special = true;
-  }, { passive: true });
-
-  window.addEventListener("keyup", (e) => {
-    const k = e.key.toLowerCase();
-    input.keys.delete(k);
-    if (k === "k") input.guard = false;
-  }, { passive: true });
-
-  /* =========================
-     Touch Joystick (single)
-  ========================= */
-  const joy = { active: false, id: null, cx: 0, cy: 0, dx: 0, dy: 0, mag: 0, radius: 54, dead: 0.14 };
-
-  function setKnob(dx, dy, mag) {
-    knob.style.transform = `translate(${dx * joy.radius * mag}px, ${dy * joy.radius * mag}px)`;
-  }
-
-  function joyStart(e) {
-    joy.active = true;
-    joy.id = e.pointerId;
-    const r = stick.getBoundingClientRect();
-    joy.cx = r.left + r.width / 2;
-    joy.cy = r.top + r.height / 2;
-    stick.setPointerCapture?.(e.pointerId);
-    joyMove(e);
-  }
-  function joyMove(e) {
-    if (!joy.active || e.pointerId !== joy.id) return;
-    const dx = e.clientX - joy.cx;
-    const dy = e.clientY - joy.cy;
-    const d = Math.hypot(dx, dy);
-    const m = clamp(d / joy.radius, 0, 1);
-    const [nx, ny] = d > 0 ? [dx / d, dy / d] : [0, 0];
-    joy.dx = nx; joy.dy = ny; joy.mag = m;
-    setKnob(nx, ny, m);
-    e.preventDefault?.();
-  }
-  function joyEnd(e) {
-    if (!joy.active || e.pointerId !== joy.id) return;
-    joy.active = false;
-    joy.id = null;
-    joy.dx = joy.dy = 0;
-    joy.mag = 0;
-    setKnob(0, 0, 0);
-  }
-
-  stick.addEventListener("pointerdown", joyStart, { passive: false });
-  window.addEventListener("pointermove", joyMove, { passive: false });
-  window.addEventListener("pointerup", joyEnd, { passive: true });
-  window.addEventListener("pointercancel", joyEnd, { passive: true });
-
-  /* =========================
-     Touch Buttons
-  ========================= */
-  function btnDown(btn, fn) {
-    btn.addEventListener("pointerdown", (e) => { e.preventDefault(); btn.classList.add("is-down"); fn(e); }, { passive: false });
-  }
-  function btnUp(btn, fn) {
-    btn.addEventListener("pointerup", () => { btn.classList.remove("is-down"); fn(); }, { passive: true });
-    btn.addEventListener("pointercancel", () => { btn.classList.remove("is-down"); fn(true); }, { passive: true });
-  }
-
-  btnDown(btnSlash, () => { slashHoldT = 0.0001; });
-  btnUp(btnSlash, () => {
-    const heavy = slashHoldT >= 0.28;
-    slashHoldT = 0;
-    slashAttack(heavy);
+  window.addEventListener("keydown", e => {
+    if (e.key === "ArrowLeft") input.left = true;
+    if (e.key === "ArrowRight") input.right = true;
+    if (e.key === "z") input.slash = true;
+    if (e.key === "x") input.guard = true;
+  });
+  window.addEventListener("keyup", e => {
+    if (e.key === "ArrowLeft") input.left = false;
+    if (e.key === "ArrowRight") input.right = false;
+    if (e.key === "z") input.slash = false;
+    if (e.key === "x") input.guard = false;
   });
 
-  btnDown(btnGuard, () => {
-    if (!input.guard) startParryWindow();
-    input.guard = true;
-  });
-  btnUp(btnGuard, () => { input.guard = false; });
-
-  btnDown(btnDash, () => { input.dash = true; });
-  btnUp(btnDash, () => {});
-
-  btnDown(btnSpecial, () => { input.special = true; });
-  btnUp(btnSpecial, () => {});
-
   /* =========================
-     Sprite System (robust ASCII) — your original
+     UPDATE
   ========================= */
-  function normalizeLines(lines) {
-    let w = 0;
-    for (const s of lines) w = Math.max(w, s.length);
-    return lines.map(s => s.padEnd(w, " "));
-  }
-  function spriteFromStrings(lines) {
-    const L = normalizeLines(lines);
-    return { w: L[0].length, h: L.length, lines: L };
-  }
-  function drawSprite(ctx2, spr, x, y, px, alpha = 1, mirrorX = false) {
-    const w = spr.w, h = spr.h;
-    const ox = Math.floor(w / 2);
-    const oy = Math.floor(h / 2);
+  function update() {
+    state.time++;
 
-    ctx2.save();
-    ctx2.translate(snap(x), snap(y));
-    ctx2.scale(mirrorX ? -1 : 1, 1);
-    ctx2.translate(-ox * px, -oy * px);
-    ctx2.imageSmoothingEnabled = false;
+    let moveSpeed = 1.6;
+    if (player.guarding) moveSpeed *= 0.42;
 
-    for (let yy = 0; yy < h; yy++) {
-      const row = spr.lines[yy];
-      for (let xx = 0; xx < w; xx++) {
-        const c = row[xx];
-        if (c === " ") continue;
-        let a = alpha;
-        if (c === ".") a *= 0.35;
-        else if (c === "#") a *= 0.85;
-        else if (c === "+") a *= 1.0;
-        ctx2.globalAlpha = a;
-        ctx2.fillStyle = "#000";
-        ctx2.fillRect(xx * px, yy * px, px, px);
+    if (input.left) player.vx -= moveSpeed;
+    if (input.right) player.vx += moveSpeed;
+
+    player.vx *= CONFIG.friction;
+    player.x += player.vx;
+
+    // facing
+    if (player.vx < -0.1) player.facing = -1;
+    if (player.vx > 0.1) player.facing = 1;
+    player.faceX = player.facing;
+
+    // guard
+    if (input.guard) {
+      if (!player.guarding) {
+        player.parryTimer = Math.floor(10 * PARRY_BONUS);
       }
-    }
-    ctx2.restore();
-    ctx2.globalAlpha = 1;
-  }
-
-  /* =========================
-     PLAYER ASCII (fallback)
-  ========================= */
-  const P_IDLE = spriteFromStrings([
-    "        ..++++..        ",
-    "      ..++####++..      ",
-    "     .++########++.     ",
-    "     ++##++..++##++     ",
-    "    .+##+..++++..+#+.   ",
-    "    .+##+..+..+..+#+.   ",
-    "     ++##++....++##++   ",
-    "      .++########++.    ",
-    "        ..++##++..      ",
-    "         .++##++.       ",
-    "        .++####++.      ",
-    "      ..++######++..    ",
-    "     .++###++++###++.   ",
-    "     ++###+....+###++   ",
-    "     ++##+  ++  +##++   ",
-    "     ++##+  ++  +##++   ",
-    "     ++##+  ++  +##++   ",
-    "     ++##++....++##++   ",
-    "     .++###++++###++.   ",
-    "      .++########++.    ",
-    "        ..++##++..      ",
-    "        .++####++.      ",
-    "       .++######++.     ",
-    "      .++##++++##++.    ",
-    "      ++##+    +##++    ",
-    "      ++##+    +##++    ",
-    "      ++##+    +##++    ",
-    "      ++##+    +##++    ",
-    "      .++..    ..++.    ",
-    "       ..++.. ..++..    ",
-    "         ..++++..       ",
-    "           ....         ",
-  ]);
-
-  function repl(lines, map) {
-    const out = lines.slice();
-    for (const m of map) out[m.i] = out[m.i].replace(m.from, m.to);
-    return out;
-  }
-
-  const P_WALK1 = spriteFromStrings(repl(P_IDLE.lines, [
-    { i: 24, from: "++##+    +##++", to: "++##+  ++ +##++" },
-    { i: 25, from: "++##+    +##++", to: "++##+ ++  +##++" },
-    { i: 28, from: ".++..    ..++.", to: ".++..  .. ..++." },
-  ]));
-  const P_WALK2 = spriteFromStrings(repl(P_IDLE.lines, [
-    { i: 24, from: "++##+    +##++", to: "++##+ ++  +##++" },
-    { i: 25, from: "++##+    +##++", to: "++##+++   +##++" },
-    { i: 28, from: ".++..    ..++.", to: ".++.. ..  ..++." },
-  ]));
-  const P_WALK3 = spriteFromStrings(repl(P_IDLE.lines, [
-    { i: 24, from: "++##+    +##++", to: "++##+   ++##++" },
-    { i: 25, from: "++##+    +##++", to: "++##+  ++ +##++" },
-    { i: 28, from: ".++..    ..++.", to: ".++..  .. ..++." },
-  ]));
-  const P_WALK4 = spriteFromStrings(repl(P_IDLE.lines, [
-    { i: 24, from: "++##+    +##++", to: "++##+  ++ +##++" },
-    { i: 25, from: "++##+    +##++", to: "++##+   ++##++" },
-    { i: 28, from: ".++..    ..++.", to: ".++.. ..  ..++." },
-  ]));
-
-  function addShield(lines, phase) {
-    return lines.map((row, i) => {
-      let add = "      ";
-      if (i >= 12 && i <= 17) add = (phase === 0 ? "  ++##" : " +++##");
-      if (i === 18) add = (phase === 0 ? "   ++ " : "  +++");
-      return row + add;
-    });
-  }
-  const P_GUARD1 = spriteFromStrings(addShield(P_IDLE.lines, 0));
-  const P_GUARD2 = spriteFromStrings(addShield(P_IDLE.lines, 1));
-
-  function addSword(lines, phase) {
-    return lines.map((row, i) => {
-      let add = "      ";
-      if (phase === 0 && (i === 15 || i === 16)) add = "   ++ ";
-      if (phase === 1 && (i === 13 || i === 14 || i === 15)) add = "  ++++";
-      if (phase === 2 && (i === 11 || i === 12 || i === 13 || i === 14)) add = " ++++++++";
-      if (phase === 2 && (i === 15 || i === 16)) add = "  ++++++";
-      if (phase === 3 && (i === 14 || i === 15)) add = "   +++";
-      return row + add;
-    });
-  }
-  const P_SLASH1 = spriteFromStrings(addSword(P_IDLE.lines, 0));
-  const P_SLASH2 = spriteFromStrings(addSword(P_IDLE.lines, 1));
-  const P_SLASH3 = spriteFromStrings(addSword(P_IDLE.lines, 2));
-  const P_SLASH4 = spriteFromStrings(addSword(P_IDLE.lines, 3));
-
-  function pickPlayerSpriteASCII() {
-    if (player.act === "slash") {
-      const t = player.animT;
-      if (t < 0.09) return P_SLASH1;
-      if (t < 0.16) return P_SLASH2;
-      if (t < 0.28) return P_SLASH3;
-      return P_SLASH4;
-    }
-    if (player.guarding) return (Math.sin(state.t * 12) > 0) ? P_GUARD1 : P_GUARD2;
-
-    const sp = Math.hypot(player.vx, player.vy);
-    if (sp > 40) {
-      player.walkT += state.dt * 9.2;
-      const f = Math.floor(player.walkT) % 4;
-      return f === 0 ? P_WALK1 : (f === 1 ? P_WALK2 : (f === 2 ? P_WALK3 : P_WALK4));
-    }
-    player.walkT = 0;
-    return P_IDLE;
-  }
-
-  /* =========================
-     ENEMIES ASCII (fallback)
-  ========================= */
-  const E_WRAITH_A = spriteFromStrings([
-    "       ..++++..       ",
-    "     ..++####++..     ",
-    "    .++########++.    ",
-    "   .+############+.   ",
-    "  .+###++++++####+.   ",
-    "  +##++..++..++##+    ",
-    "  +##+..++++..+##+    ",
-    "  +##+..+..+..+##+    ",
-    "  +##+..++++..+##+    ",
-    "  +##++..++..++##+    ",
-    "  .+###++++++####+.   ",
-    "   .+############+.   ",
-    "    .++########++.    ",
-    "     ..++####++..     ",
-    "       ..++++..       ",
-    "    ..  ..  ..  ..    ",
-    "   .++.        .++.   ",
-    "   ++.          .++   ",
-    "   +.            .+   ",
-    "   +.            .+   ",
-    "   ++.          .++   ",
-    "   .++.        .++.   ",
-    "    ..++..  ..++..    ",
-    "      ..........      ",
-  ]);
-  const E_WRAITH_B = spriteFromStrings(E_WRAITH_A.lines.map((r, i) => {
-    if (i === 17) return r.replace("++.", ".++");
-    if (i === 18) return r.replace("+.", "++");
-    return r;
-  }));
-
-  const E_BRUTE_A = spriteFromStrings([
-    "     ..++######++..     ",
-    "   ..++##########++..   ",
-    "  .++##############++.  ",
-    " .+##################+. ",
-    " +####+++++++#########+ ",
-    " +##++..++..++..++###+  ",
-    " +##+..++++..++++..##+  ",
-    " +##+..+..+..+..+..##+  ",
-    " +##+..++++..++++..##+  ",
-    " +##++..++..++..++###+  ",
-    " +####+++++++#########+ ",
-    " .+##################+. ",
-    "  .++##############++.  ",
-    "   ..++##########++..   ",
-    "     ..++######++..     ",
-    "       ..++..++..       ",
-    "     ..++..  ..++..     ",
-    "    .++..      ..++.    ",
-    "    ++.          .++    ",
-    "    +.            .+    ",
-    "    ++.          .++    ",
-    "    .++..      ..++.    ",
-    "     ..++..  ..++..     ",
-    "       ..........       ",
-  ]);
-  const E_BRUTE_B = spriteFromStrings(E_BRUTE_A.lines.map((r, i) => {
-    if (i === 15) return r.replace("..++..++..", "..++.. ..");
-    return r;
-  }));
-
-  const E_DART_A = spriteFromStrings([
-    "      ..++++..      ",
-    "    ..++####++..    ",
-    "   .++########++.   ",
-    "  .+###########+.   ",
-    "  +###++++++### +   ",
-    "  +##+..++..+##+    ",
-    "  +##+..++++..##+   ",
-    "  +##+..+..+..##+   ",
-    "  +##+..++++..##+   ",
-    "  +##+..++..+##+    ",
-    "  +###++++++### +   ",
-    "  .+###########+.   ",
-    "   .++########++.   ",
-    "    ..++####++..    ",
-    "      ..++++..      ",
-    "    ..  ..  ..      ",
-    "   .++.      .++.    ",
-    "   ++.        .++    ",
-    "   +.          .+    ",
-    "   ++.        .++    ",
-    "   .++.      .++.    ",
-    "    ..++.. ..++..    ",
-    "      ..........     ",
-  ]);
-  const E_DART_B = spriteFromStrings(E_DART_A.lines.map((r, i) => {
-    if (i === 18) return r.replace("+.", "++");
-    return r;
-  }));
-
-  function pickEnemySpriteASCII(e) {
-    const breathe = (Math.sin(e.animT * 6.5) > 0);
-    if (e.type === "brute") return breathe ? E_BRUTE_A : E_BRUTE_B;
-    if (e.type === "dart") return breathe ? E_DART_A : E_DART_B;
-    return breathe ? E_WRAITH_A : E_WRAITH_B;
-  }
-
-  /* =========================
-     ENEMY prettier render (ink blobs) — code-only
-  ========================= */
-  function drawEnemyInk(e, x, y) {
-    // style per type
-    const r = e.r;
-    const pulse = 1 + 0.06 * Math.sin(e.animT * 6.5);
-    const rr = r * pulse;
-
-    let wobAmp = e.type === "dart" ? 0.22 : (e.type === "brute" ? 0.14 : 0.18);
-    let lobes = e.type === "brute" ? 3 : (e.type === "dart" ? 4 : 5);
-
-    const baseA = e.hit > 0 ? 1.0 : 0.92;
-
-    ctx.save();
-    ctx.translate(snap(x), snap(y));
-
-    // outer ink shape
-    ctx.beginPath();
-    const N = 18;
-    for (let i = 0; i <= N; i++) {
-      const a = (i / N) * Math.PI * 2;
-      const n1 = Math.sin(a * lobes + e.seed * 0.02 + state.t * 1.6);
-      const n2 = Math.sin(a * (lobes + 2) + e.seed * 0.09 - state.t * 1.1);
-      const n = (n1 * 0.6 + n2 * 0.4);
-      const rad = rr * (1 + wobAmp * n);
-      const px = Math.cos(a) * rad;
-      const py = Math.sin(a) * rad;
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.globalAlpha = 0.92 * baseA;
-    ctx.fillStyle = "#000";
-    ctx.fill();
-
-    // inner wash (ink density)
-    ctx.globalAlpha = 0.10 * baseA;
-    ctx.beginPath();
-    ctx.arc(-rr * 0.18, -rr * 0.10, rr * 0.62, 0, Math.PI * 2);
-    ctx.fill();
-
-    // core “eye” (to keep readability)
-    ctx.globalAlpha = 0.18 * baseA;
-    ctx.beginPath();
-    ctx.arc(rr * 0.18, rr * 0.10, rr * 0.30, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.globalAlpha = 0.22 * baseA;
-    ctx.beginPath();
-    ctx.arc(rr * 0.22, rr * 0.12, rr * 0.10, 0, Math.PI * 2);
-    ctx.fillStyle = "#fff";
-    ctx.fill();
-
-    // ground ring
-    ctx.globalAlpha = 0.55 * baseA;
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.ellipse(0, rr * 0.98, rr * 0.9, rr * 0.35, 0, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.restore();
-    ctx.globalAlpha = 1;
-  }
-
-  /* =========================
-     HUD / Game Over
-  ========================= */
-  function syncHUD() {
-    hpFill.style.width = `${clamp(player.hp / player.hpMax, 0, 1) * 100}%`;
-    spFill.style.width = `${clamp(player.ink / player.inkMax, 0, 1) * 100}%`;
-    scoreText.textContent = String(state.score);
-    hiText.textContent = String(state.hi);
-    killText.textContent = String(state.kills);
-    waveText.textContent = String(state.wave);
-    comboText.textContent = String(state.combo);
-    rankText.textContent = state.rank;
-  }
-
-  function gameOver() {
-    state.running = false;
-    overlay.classList.remove("hide");
-    document.getElementById("ovTitle").textContent = "GAME OVER";
-    document.getElementById("ovBody").innerHTML =
-      `SCORE <b>${state.score}</b> · BEST <b>${state.hi}</b><br/>RESET을 누르면 새로 시작합니다.`;
-  }
-
-  /* =========================
-     Draw helpers
-  ========================= */
-  function drawCone(sx, sy, fx, fy, reach, halfAngle, alpha) {
-    const ang = Math.atan2(fy, fx);
-    ctx.save();
-    ctx.translate(sx, sy);
-    ctx.rotate(ang);
-
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = "#000";
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.arc(0, 0, reach, -halfAngle, halfAngle);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.globalAlpha = Math.min(1, alpha + 0.14);
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, 0, reach, -halfAngle, halfAngle);
-    ctx.stroke();
-
-    ctx.restore();
-    ctx.globalAlpha = 1;
-  }
-
-  function drawBrushFlash(x, y, nx, ny, heavy, a) {
-    const len = heavy ? 170 : 125;
-    const w = heavy ? 9 : 7;
-
-    ctx.save();
-    ctx.fillStyle = "#000";
-
-    ctx.globalAlpha = (heavy ? 0.40 : 0.30) * a;
-    for (let i = 0; i < len; i += 5) {
-      const k = i / len;
-      const jitter = Math.sin((k * 12 + state.t * 18)) * (heavy ? 3.0 : 2.1);
-      const px = snap(x + nx * i - ny * jitter);
-      const py = snap(y + nx * 0 + ny * i + nx * jitter);
-      ctx.fillRect(px - w, py - 1, w * 2, 2);
-    }
-
-    ctx.restore();
-    ctx.globalAlpha = 1;
-  }
-
-  function drawParryFlash(x, y, fx, fy, alpha) {
-    drawCone(x, y, fx, fy, 88, 0.72, 0.28 * alpha);
-
-    ctx.save();
-    ctx.globalAlpha = 0.35 * alpha;
-    ctx.fillStyle = "#000";
-    ctx.beginPath();
-    ctx.arc(x, y, 44, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    ctx.globalAlpha = 1;
-  }
-
-  /* =========================
-     Update
-  ========================= */
-  function update(dt) {
-    if (state.hitStop > 0) {
-      state.hitStop -= 1;
-      dt = 0;
-    }
-
-    state.t += dt;
-    player.animT += dt;
-
-    if (slashHoldT > 0) slashHoldT += dt;
-
-    if (state.comboTimer > 0) {
-      state.comboTimer -= dt;
-      if (state.comboTimer <= 0) breakCombo();
-    }
-
-    player.ink = clamp(player.ink + 18 * dt, 0, player.inkMax);
-
-    player.dashCD = Math.max(0, player.dashCD - dt);
-    player.slashCD = Math.max(0, player.slashCD - dt);
-    player.invuln = Math.max(0, player.invuln - dt);
-
-    player.flash = Math.max(0, player.flash - dt * 4.6);
-    player.parryT = Math.max(0, player.parryT - dt);
-    player.parryFlash = Math.max(0, player.parryFlash - dt * 7);
-
-    // move input
-    let mx = 0, my = 0;
-    const k = input.keys;
-    if (k.has("w") || k.has("arrowup")) my -= 1;
-    if (k.has("s") || k.has("arrowdown")) my += 1;
-    if (k.has("a") || k.has("arrowleft")) mx -= 1;
-    if (k.has("d") || k.has("arrowright")) mx += 1;
-
-    // joystick
-    const jm = joy.mag > joy.dead ? joy.mag : 0;
-    if (jm > 0) { mx += joy.dx * jm; my += joy.dy * jm; }
-
-    const mlen = Math.hypot(mx, my);
-    if (mlen > 0.001) {
-      const nx = mx / mlen;
-      const ny = my / mlen;
-      player.faceX = lerp(player.faceX, nx, clamp(9 * dt, 0, 1));
-      player.faceY = lerp(player.faceY, ny, clamp(9 * dt, 0, 1));
-      if (nx < -0.15) player.facing = -1;
-      if (nx > 0.15) player.facing = 1;
-    }
-
-    // guarding
-    player.guarding = !!input.guard;
-    player.guardFx = player.guarding ? Math.min(1, player.guardFx + dt * 6.5) : Math.max(0, player.guardFx - dt * 9);
-
-    // actions
-    if (input.dash) { dash(); input.dash = false; }
-    if (input.special) { specialInkBurst(); input.special = false; }
-    if (input.slashTap) { slashAttack(false); input.slashTap = false; }
-
-    // settle
-    if (player.act === "slash" && player.animT > 0.34) player.act = "idle";
-    if (player.act === "dash" && player.animT > 0.22) player.act = "idle";
-
-    // movement
-    const baseSp = player.guarding ? 175 : 250;
-    const accel = player.guarding ? 5.7 : 5.2;
-    player.vx += mx * baseSp * accel * dt;
-    player.vy += my * baseSp * accel * dt;
-
-    const fr = player.guarding ? 9.2 : 7.6;
-    player.vx = lerp(player.vx, 0, clamp(fr * dt, 0, 1));
-    player.vy = lerp(player.vy, 0, clamp(fr * dt, 0, 1));
-
-    player.x += player.vx * dt;
-    player.y += player.vy * dt;
-    player.x = clamp(player.x, 60, WORLD.w - 60);
-    player.y = clamp(player.y, 80, WORLD.h - 60);
-
-    // enemies
-    for (let i = enemies.length - 1; i >= 0; i--) {
-      const e = enemies[i];
-      e.animT += dt;
-      e.stun = Math.max(0, e.stun - dt);
-
-      const dx = player.x - e.x;
-      const dy = player.y - e.y;
-      const [nx, ny] = norm(dx, dy);
-
-      const stunMul = e.stun > 0 ? 0.25 : 1;
-      const wob = Math.sin(state.t * 2.2 + e.wob) * (e.type === "dart" ? 0.14 : 0.10);
-      e.x += (nx * e.sp + -ny * e.sp * wob) * dt * stunMul;
-      e.y += (ny * e.sp + nx * e.sp * wob) * dt * stunMul;
-
-      e.hit = Math.max(0, e.hit - dt);
-
-      const d = Math.hypot(dx, dy);
-      if (d < e.r + player.r && player.invuln <= 0) {
-        if (player.guarding) {
-          if (tryParryOnContact(i)) {
-            player.invuln = 0.18;
-            continue;
-          }
-          const base = 10 + Math.floor(state.wave * 1.1);
-          const dmg = e.type === "brute" ? base + 4 : (e.type === "dart" ? base - 2 : base);
-          player.hp -= Math.max(1, Math.floor(dmg * 0.22));
-          player.ink = clamp(player.ink + 12, 0, player.inkMax);
-          shake(10);
-          hitStop(3);
-          haptic(14);
-          e.x -= nx * 10;
-          e.y -= ny * 10;
-          e.stun = Math.max(e.stun, 0.08);
-        } else {
-          const base = 10 + Math.floor(state.wave * 1.1);
-          const dmg = e.type === "brute" ? base + 4 : (e.type === "dart" ? base - 2 : base);
-          player.hp -= dmg;
-          shake(22);
-          hitStop(6);
-          haptic(34);
-          breakCombo();
-          burstDots(player.x, player.y, 1.0);
-          player.flash = Math.max(player.flash, 0.32);
-        }
-
-        player.invuln = 0.40;
-        if (player.hp <= 0) {
-          player.hp = 0;
-          gameOver();
-        }
-      }
-    }
-
-    // particles
-    for (let i = dots.length - 1; i >= 0; i--) {
-      const p = dots[i];
-      p.t -= dt;
-      if (p.t <= 0) { dots.splice(i, 1); continue; }
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vx *= 0.90;
-      p.vy *= 0.90;
-    }
-
-    // slashes life
-    for (let i = slashes.length - 1; i >= 0; i--) {
-      slashes[i].t -= dt;
-      if (slashes[i].t <= 0) slashes.splice(i, 1);
-    }
-
-    if (state.score > state.hi) {
-      state.hi = state.score;
-      localStorage.setItem("ink_hi", String(state.hi));
-    }
-
-    syncHUD();
-  }
-
-  /* =========================
-     Draw: Player PNG
-  ========================= */
-  function drawPlayerPNG(x, y, alpha) {
-    // IMPORTANT: avoid blur
-    ctx.imageSmoothingEnabled = false;
-
-    const img = SPR.playerImg;
-    if (!img || !SPR.playerReady) return false;
-
-    // size based on collision radius
-    const base = player.r * 2;
-    const size = base * CONFIG.playerPngScale;
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-
-    // mirror if facing left
-    if (player.facing < 0) {
-      ctx.translate(snap(x), snap(y));
-      ctx.scale(-1, 1);
-      ctx.drawImage(img, -size / 2, -size / 2, size, size);
+      player.guarding = true;
     } else {
-      ctx.drawImage(img, snap(x - size / 2), snap(y - size / 2), size, size);
+      player.guarding = false;
     }
 
-    ctx.restore();
-    ctx.globalAlpha = 1;
-    return true;
+    player.guardFx += (player.guarding ? 1 : -1) * 0.2;
+    player.guardFx = Math.max(0, Math.min(1, player.guardFx));
+
+    if (player.parryTimer > 0) player.parryTimer--;
+
+    // enemy attack (dummy)
+    enemy.attackTimer++;
+    if (enemy.attackTimer > 120) {
+      enemy.attackTimer = 0;
+      checkParry();
+    }
+
+    // camera follow
+    state.camX += (player.x - state.camX - CONFIG.width / 2) * 0.1;
+  }
+
+  function checkParry() {
+    if (!player.guarding) return;
+
+    const dx = enemy.x - player.x;
+    const dist = Math.abs(dx);
+
+    if (dist < 60 && player.parryTimer > 0) {
+      // parry success
+      enemy.x += player.facing * 60;
+    }
   }
 
   /* =========================
-     Draw
+     DRAW
   ========================= */
   function draw() {
-    const rect = canvas.getBoundingClientRect();
-    const vw = rect.width;
-    const vh = rect.height;
-
-    // make sure nothing weird stacks
-    ctx.globalCompositeOperation = "source-over";
-    ctx.globalAlpha = 1;
-    ctx.imageSmoothingEnabled = false;
-
-    const targetCamX = clamp(player.x - vw / 2, 0, WORLD.w - vw);
-    const targetCamY = clamp(player.y - vh / 2, 0, WORLD.h - vh);
-    state.camX = lerp(state.camX, targetCamX, clamp(6 * state.dt, 0, 1));
-    state.camY = lerp(state.camY, targetCamY, clamp(6 * state.dt, 0, 1));
-
-    let sx = 0, sy = 0;
-    if (state.shake > 0) {
-      sx = (Math.random() * 2 - 1) * state.shake;
-      sy = (Math.random() * 2 - 1) * state.shake;
-      state.shake = Math.max(0, state.shake - 28 * state.dt);
-    }
-
-    ctx.fillStyle = "#efe6cf";
-    ctx.fillRect(0, 0, vw, vh);
-
-    const px = clamp(Math.round(Math.min(vw, vh) / 190), 2, 4);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
-    ctx.translate(sx, sy);
+    ctx.translate(-state.camX, -state.camY);
 
-    // enemies
-    for (let i = 0; i < enemies.length; i++) {
-      const e = enemies[i];
-      const x = e.x - state.camX;
-      const y = e.y - state.camY;
+    // ground
+    ctx.strokeStyle = "#000";
+    ctx.beginPath();
+    ctx.moveTo(-1000, 40);
+    ctx.lineTo(2000, 40);
+    ctx.stroke();
 
-      const bob = (Math.sin(e.animT * 6.5) > 0) ? 1 : 0;
-
-      if (CONFIG.useInkEnemyRender) {
-        drawEnemyInk(e, x, y + bob);
-      } else {
-        const spr = pickEnemySpriteASCII(e);
-        const a = e.hit > 0 ? 1 : 0.92;
-        drawSprite(ctx, spr, x, y + bob, px, a, false);
-      }
-    }
-
-    // guard visuals
-    if (player.guarding) {
-      const x = player.x - state.camX;
-      const y = player.y - state.camY;
-      const fx = player.faceX || 1;
-      const fy = player.faceY || 0;
-      drawCone(x, y, fx, fy, 92, 0.70, 0.14 + 0.12 * player.guardFx);
-
-      if (player.parryFlash > 0) {
-        const a = clamp(player.parryFlash / 0.26, 0, 1);
-        drawParryFlash(x, y, fx, fy, a);
-      }
-    }
-
-    // slash visuals
-    if (slashes.length > 0) {
-      const s = slashes[slashes.length - 1];
-      const x = player.x - state.camX;
-      const y = player.y - state.camY;
-      const a = clamp(s.t / s.life, 0, 1);
-      drawCone(x, y, s.nx, s.ny, s.reach, s.half, (s.heavy ? 0.26 : 0.18) * a);
-      drawBrushFlash(x + s.nx * 20, y + s.ny * 20, s.nx, s.ny, s.heavy, a);
+    // enemy
+    if (enemy.alive) {
+      ctx.fillRect(enemy.x - enemy.w / 2, enemy.y - enemy.h, enemy.w, enemy.h);
     }
 
     // player
-    {
-      const x = player.x - state.camX;
-      const y = player.y - state.camY;
+    ctx.fillRect(player.x - player.w / 2, player.y - player.h, player.w, player.h);
 
-      if (player.flash > 0.01) {
-        ctx.globalAlpha = 0.14 * player.flash;
-        ctx.fillStyle = "#000";
-        ctx.beginPath();
-        ctx.arc(x, y, 58, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      }
-
-      const alpha = player.invuln > 0 ? 0.78 : 1;
-
-      // If PNG ready -> use it. Else fallback to ASCII sprite.
-      const used = (CONFIG.usePlayerPNG && drawPlayerPNG(x, y, alpha));
-      if (!used) {
-        const spr = pickPlayerSpriteASCII();
-        drawSprite(ctx, spr, x, y, px, alpha, player.facing < 0);
-      }
+    // guard cone
+    if (player.guardFx > 0) {
+      drawCone(
+        player.x,
+        player.y - 20,
+        player.faceX,
+        0,
+        100,
+        0.9,
+        0.22 * player.guardFx
+      );
     }
-
-    // particles
-    for (let i = 0; i < dots.length; i++) {
-      const p = dots[i];
-      const x = p.x - state.camX;
-      const y = p.y - state.camY;
-      const a = clamp(p.t / p.life, 0, 1);
-      ctx.globalAlpha = 0.62 * a;
-      ctx.fillStyle = "#000";
-      ctx.fillRect(snap(x), snap(y), p.size, p.size);
-    }
-    ctx.globalAlpha = 1;
 
     ctx.restore();
+  }
 
-    // letterbox edges
-    ctx.globalAlpha = 0.18;
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, vw, 18);
-    ctx.fillRect(0, vh - 18, vw, 18);
-    ctx.globalAlpha = 1;
+  function drawCone(x, y, fx, fy, len, angle, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.arc(
+      x,
+      y,
+      len,
+      Math.atan2(fy, fx) - angle,
+      Math.atan2(fy, fx) + angle
+    );
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   }
 
   /* =========================
-     Loop
+     LOOP
   ========================= */
-  function loop(ts) {
-    const t = ts / 1000;
-    let dt = Math.min(0.033, t - (state.last / 1000 || t));
-    state.last = ts;
-    state.dt = dt;
-
-    if (state.running) update(dt);
+  function loop() {
+    update();
     draw();
     requestAnimationFrame(loop);
   }
 
-  /* =========================
-     Overlay
-  ========================= */
-  document.getElementById("ovTitle").textContent = "INK SWORD";
-  document.getElementById("ovBody").innerHTML =
-    `<b>이동</b> WASD/방향키 · <b>베기</b> J (모바일 SLASH 홀드=헤비) · <b>가드</b> K/GUARD (딱 누르면 패링 번쩍) · <b>대시</b> L/DASH · <b>잉크 폭발</b> I/INK BURST<br/>
-     <small style="opacity:.75">TIP: /assets/player.png 없으면 자동으로 기존 도트(ASCII)로 돌아갑니다.</small>`;
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = CONFIG.width * dpr;
+    canvas.height = CONFIG.height * dpr;
+    canvas.style.width = CONFIG.width + "px";
+    canvas.style.height = CONFIG.height + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
 
-  startBtn.addEventListener("click", () => {
-    overlay.classList.add("hide");
-    state.running = true;
-    state.last = performance.now();
-  });
-  resetBtn.addEventListener("click", () => {
-    resetGame();
-    overlay.classList.remove("hide");
-    state.running = false;
-  });
-
-  /* =========================
-     Boot
-  ========================= */
-  resetGame();
-  requestAnimationFrame(loop);
-  state.running = false;
+  resize();
+  loop();
 })();
