@@ -2,6 +2,8 @@
    INK BRUSH RENDERING SYSTEM
 */
 
+console.log("INK v6 LOADED", Date.now());
+
 (() => {
   const canvas = document.getElementById("c");
   const ctx = canvas.getContext("2d");
